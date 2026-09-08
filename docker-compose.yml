@@ -1,16 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: capstone
-      POSTGRES_USER: capstone
-      POSTGRES_PASSWORD: capstone
+    env_file:
+      - ./packages/backend/.env
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U capstone -d capstone"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -19,15 +17,11 @@ services:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
+    env_file:
+      - ./packages/backend/.env
     environment:
-      PORT: 3000
-      CORS_ORIGINS: http://localhost:5173
       DATABASE_ENABLED: "true"
       DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_NAME: capstone
-      DATABASE_USER: capstone
-      DATABASE_PASSWORD: capstone
     ports:
       - "3000:3000"
     depends_on:
