@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const hasDatabase = Boolean(process.env.TEST_DATABASE_URL);
+process.env.JWT_SECRET = "registration-test-secret-that-is-at-least-32-characters";
+process.env.JWT_EXPIRES_IN = "15m";
 
 if (hasDatabase) {
   const databaseUrl = new URL(process.env.TEST_DATABASE_URL);

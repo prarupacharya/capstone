@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
-const { parseBackendEnv } = require("../dist/config/env.js");
+const { parseBackendEnv, parseJwtConfig } = require("../dist/config/env.js");
 const { configureApp } = require("../dist/main.js");
 
 test("uses safe backend environment defaults", () => {
@@ -34,4 +34,26 @@ test("wires configured origins into Nest CORS", () => {
   assert.deepEqual(options, {
     origin: ["http://localhost:5173", "https://app.example.com"]
   });
+});
+
+test("parses JWT configuration with a safe default expiration", () => {
+  assert.deepEqual(parseJwtConfig({
+    JWT_SECRET: "a-secret-that-is-at-least-32-characters-long"
+  }), {
+    secret: "a-secret-that-is-at-least-32-characters-long",
+    expiresIn: "15m"
+  });
+  assert.equal(parseJwtConfig({
+    JWT_SECRET: "a-secret-that-is-at-least-32-characters-long",
+    JWT_EXPIRES_IN: "2h"
+  }).expiresIn, "2h");
+});
+
+test("rejects missing, short, and invalid JWT configuration", () => {
+  assert.throws(() => parseJwtConfig({}), /JWT_SECRET/);
+  assert.throws(() => parseJwtConfig({ JWT_SECRET: "too-short" }), /JWT_SECRET/);
+  assert.throws(() => parseJwtConfig({
+    JWT_SECRET: "a-secret-that-is-at-least-32-characters-long",
+    JWT_EXPIRES_IN: "forever"
+  }), /JWT_EXPIRES_IN/);
 });

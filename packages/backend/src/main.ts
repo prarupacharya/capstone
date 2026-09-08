@@ -17,7 +17,7 @@ export function configureApp(app: Pick<INestApplication, "enableCors">, config: 
 }
 
 export function configureValidation(app: Pick<INestApplication, "select" | "useGlobalPipes">) {
-  useContainer(app.select(AppModule), { fallbackOnErrors: false });
+  useContainer(app.select(AppModule), { fallbackOnErrors: true });
   app.useGlobalPipes(new ValidationPipe({
     forbidNonWhitelisted: true,
     transform: true,
