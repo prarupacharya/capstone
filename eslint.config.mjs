@@ -5,7 +5,7 @@ export default [
     ignores: ["node_modules/**"],
   },
   {
-    files: ["**/*.ts"],
+    files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" }
@@ -21,7 +21,7 @@ export default [
   {
     files: ["**/*.mjs"],
     languageOptions: {
-      globals: { fetch: "readonly", process: "readonly" }
+      globals: { URL: "readonly", fetch: "readonly", process: "readonly" }
     },
     rules: {
       "no-undef": "error",
