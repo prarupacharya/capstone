@@ -1,0 +1,15 @@
+{
+  "name": "capstone",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "lint": "eslint . --max-warnings=0 && node scripts/run-workspaces.mjs lint",
+    "typecheck": "tsc --noEmit --project tsconfig.base.json && node scripts/run-workspaces.mjs typecheck",
+    "test": "node --test && node scripts/run-workspaces.mjs test"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0"
+  }
+}
