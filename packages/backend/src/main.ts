@@ -1,10 +1,18 @@
 import "reflect-metadata";
+import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import { parseBackendEnv, type BackendConfig } from "./config/env";
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(Number(process.env.PORT ?? 3000));
+export function configureApp(app: Pick<INestApplication, "enableCors">, config: BackendConfig) {
+  app.enableCors({ origin: config.corsOrigins });
 }
 
-void bootstrap();
+export async function bootstrap() {
+  const config = parseBackendEnv();
+  const app = await NestFactory.create(AppModule);
+  configureApp(app, config);
+  await app.listen(config.port);
+}
+
+if (require.main === module) void bootstrap();
