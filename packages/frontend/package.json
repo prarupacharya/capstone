@@ -11,9 +11,10 @@
     "build-storybook": "storybook build",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && npm run test:config && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
+    "test": "npm run build && npm run test:config && npm run test:api && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
     "test:browser": "playwright test",
-    "test:config": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --outDir dist/config-test src/config/env.ts && node --test test/env.test.mjs"
+    "test:config": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --outDir dist/config-test src/config/env.ts && node --test test/env.test.mjs",
+    "test:api": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --types vite/client --outDir dist/api-test src/config/env.ts src/api/api-error.ts src/api/client.ts src/api/auth.ts && node --test test/auth-api.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -23,7 +24,6 @@
     "@playwright/test": "^1.51.1",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/react-vite": "^8.6.14",
-    "@playwright/test": "^1.51.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
