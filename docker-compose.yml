@@ -1,18 +1,16 @@
 services:
   postgres:
     image: postgres:16-alpine
-    env_file:
-      - ./packages/backend/.env
+    environment:
+      POSTGRES_DB: capstone
+      POSTGRES_USER: capstone
+      POSTGRES_PASSWORD: capstone
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U capstone -d capstone"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,23 +19,22 @@ services:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
-    # JWT_SECRET, JWT_EXPIRES_IN, and database credentials come from this file.
-    env_file:
-      - ./packages/backend/.env
     environment:
+      PORT: 3000
+      CORS_ORIGINS: http://localhost:5173
       DATABASE_ENABLED: "true"
       DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: capstone
+      DATABASE_USER: capstone
+      DATABASE_PASSWORD: capstone
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O - http://localhost:3000/health || exit 1",
-        ]
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 5
