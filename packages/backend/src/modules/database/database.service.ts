@@ -32,4 +32,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     if (!this.pool) throw new Error("Database is not enabled");
     return this.pool;
   }
+
+  async isHealthy() {
+    if (!this.pool) return false;
+
+    try {
+      await this.pool.query("SELECT 1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

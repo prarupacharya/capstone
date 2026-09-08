@@ -1,8 +1,9 @@
 import { request } from "./client";
 
 export interface HealthResponse {
-  status: "ok";
-  service: string;
+  status: "up" | "down";
+  backend: "up" | "down";
+  database: "up" | "down";
 }
 
 export async function getHealth(): Promise<HealthResponse> {
