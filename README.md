@@ -30,3 +30,6 @@ npm test
 ```
 
 Pull requests and pushes run the same lint, typecheck, and test commands through GitHub Actions.
+
+## Docker Postges command 
+docker compose up -d postgres
