@@ -21,7 +21,13 @@ export default [
   {
     files: ["**/*.mjs"],
     languageOptions: {
-      globals: { URL: "readonly", fetch: "readonly", process: "readonly" }
+      globals: {
+        URL: "readonly",
+        Response: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly"
+      }
     },
     rules: {
       "no-undef": "error",
