@@ -56,7 +56,7 @@ export function LoginForm({
       <div className="auth-card__intro">
         <p className="eyebrow">Welcome back</p>
         <h2 id="login-heading">Log in</h2>
-        <p>Use your Capstone account to continue.</p>
+        <p>Use your LF account to continue.</p>
       </div>
 
       <form className="auth-form" aria-label="Log in" onSubmit={handleSubmit}>

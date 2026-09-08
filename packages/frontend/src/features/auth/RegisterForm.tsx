@@ -50,7 +50,7 @@ export function RegisterForm({
       <div className="auth-card__intro">
         <p className="eyebrow">Join the community</p>
         <h2 id="register-heading">Create your account</h2>
-        <p>Register to continue to Capstone.</p>
+        <p>Register to continue to LF-Chat.</p>
       </div>
 
       <form className="auth-form" onSubmit={handleSubmit}>

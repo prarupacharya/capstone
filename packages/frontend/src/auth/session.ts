@@ -12,6 +12,16 @@ function getSessionStorage() {
   }
 }
 
+function clearLegacyLocalStorage() {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  } catch {
+    // Ignore unavailable or read-only storage environments.
+  }
+}
+
 export function getAccessToken() {
   try {
     return getSessionStorage()?.getItem(ACCESS_TOKEN_KEY) ?? null;
@@ -35,6 +45,8 @@ export function clearAccessToken() {
   } catch {
     // Ignore unavailable or read-only storage environments.
   }
+
+  clearLegacyLocalStorage();
 }
 
 export function hasAccessToken() {
