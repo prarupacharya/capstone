@@ -25,6 +25,28 @@ test("the root quality scripts are available", () => {
   assert.equal(typeof scripts.test, "string");
 });
 
+test("the root workflow scripts cover the full stack", () => {
+  const scripts = readJson("package.json").scripts;
+
+  assert.match(scripts.build, /run-workspaces\.mjs build/);
+  assert.match(scripts.dev, /scripts\/dev\.mjs/);
+  assert.match(scripts["db:up"], /docker compose up -d postgres/);
+  assert.match(scripts["db:down"], /docker compose down/);
+});
+
+test("Docker Compose defines the complete application stack", () => {
+  const compose = readFileSync(join(root, "docker-compose.yml"), "utf8");
+
+  assert.match(compose, /postgres:/);
+  assert.match(compose, /backend:/);
+  assert.match(compose, /frontend:/);
+  assert.match(compose, /dockerfile: packages\/backend\/Dockerfile/);
+  assert.match(compose, /dockerfile: packages\/frontend\/Dockerfile/);
+  assert.match(compose, /DATABASE_HOST: postgres/);
+  assert.match(compose, /VITE_API_URL: http:\/\/localhost:3000/);
+  assert.match(compose, /condition: service_healthy/);
+});
+
 test("CI runs the required quality checks", async () => {
   const workflow = await new Promise((resolve, reject) => {
     readFile(join(root, ".github", "workflows", "ci.yml"), "utf8", (error, data) => {

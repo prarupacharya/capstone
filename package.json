@@ -6,6 +6,10 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "node scripts/run-workspaces.mjs build",
+    "db:down": "docker compose down",
+    "db:up": "docker compose up -d postgres",
+    "dev": "node scripts/dev.mjs",
     "lint": "eslint . --max-warnings=0 && node scripts/run-workspaces.mjs lint",
     "typecheck": "tsc --noEmit --project tsconfig.base.json && node scripts/run-workspaces.mjs typecheck",
     "test": "node --test test/repository.test.mjs && node scripts/run-workspaces.mjs test"
