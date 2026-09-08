@@ -7,6 +7,8 @@ import { resolve } from "node:path";
 import { NestFactory } from "@nestjs/core";
 
 const require = createRequire(import.meta.url);
+process.env.JWT_SECRET = "health-test-secret-that-is-at-least-32-characters";
+process.env.JWT_EXPIRES_IN = "15m";
 const { AppModule } = require("../dist/app.module.js");
 let app;
 let baseUrl;
