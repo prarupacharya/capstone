@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && node --test test/health.e2e-spec.mjs"
+    "test": "npm run build && node --test test/health.e2e-spec.mjs test/env.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
