@@ -1,4 +1,6 @@
 import { MiddlewareConsumer, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { JwtAuthGuard } from "./common/auth/jwt-auth.guard";
 import { AppLogger } from "./common/logging/app-logger";
 import { RequestLoggingMiddleware } from "./common/logging/request-logging.middleware";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -9,7 +11,12 @@ import { UsersModule } from "./modules/users/users.module";
 
 @Module({
   imports: [AuthModule, DatabaseModule, HealthModule, UsersModule],
-  providers: [AppLogger, IsEmailAvailableConstraint, RequestLoggingMiddleware]
+  providers: [
+    AppLogger,
+    IsEmailAvailableConstraint,
+    RequestLoggingMiddleware,
+    { provide: APP_GUARD, useClass: JwtAuthGuard }
+  ]
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
