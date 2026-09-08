@@ -1,10 +1,10 @@
-import { HomePage } from "./features/home/HomePage";
+import { AuthPage } from "./features/auth/AuthPage";
 import { BackendStatus } from "./features/health/BackendStatus";
 
 export default function App() {
   return (
     <>
-      <HomePage />
+      <AuthPage />
       <BackendStatus />
     </>
   );
