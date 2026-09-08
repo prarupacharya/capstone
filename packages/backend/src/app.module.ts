@@ -6,11 +6,12 @@ import { RequestLoggingMiddleware } from "./common/logging/request-logging.middl
 import { AuthModule } from "./modules/auth/auth.module";
 import { IsEmailAvailableConstraint } from "./modules/auth/validation/is-email-available.validator";
 import { DatabaseModule } from "./modules/database/database.module";
+import { ChatModule } from "./modules/chat/chat.module";
 import { HealthModule } from "./modules/health/health.module";
 import { UsersModule } from "./modules/users/users.module";
 
 @Module({
-  imports: [AuthModule, DatabaseModule, HealthModule, UsersModule],
+  imports: [AuthModule, ChatModule, DatabaseModule, HealthModule, UsersModule],
   providers: [
     AppLogger,
     IsEmailAvailableConstraint,
