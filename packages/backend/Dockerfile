@@ -25,4 +25,4 @@ RUN npm ci --omit=dev
 COPY --from=build /app/packages/backend/dist ./packages/backend/dist
 
 EXPOSE 3000
-CMD ["node", "packages/backend/dist/main.js"]
+CMD ["npm", "run", "start", "--workspace", "backend"]
