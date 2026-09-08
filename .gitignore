@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 packages/backend/logs/
+packages/frontend/storybook-static/
 .env
 .env.*
 !.env.example
