@@ -1,0 +1,82 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dora-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: dora
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run quality gates
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Build applications
+        run: npm run build
+
+      - name: Package release outputs
+        run: |
+          mkdir -p release/backend release/frontend
+          cp -R packages/backend/dist release/backend/dist
+          cp -R packages/frontend/dist release/frontend/dist
+
+      - name: Write deployment metadata
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_REF: ${{ github.event.pull_request.html_url || '' }}
+          RUN_ID: ${{ github.run_id }}
+          STARTED_AT: ${{ github.run_started_at }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          cat > release/deployment-record.json <<EOF
+          {
+            "environment": "dora",
+            "commit_sha": "${COMMIT_SHA}",
+            "ref": "${REF_NAME}",
+            "pull_request": "${PR_REF}",
+            "run_id": "${RUN_ID}",
+            "started_at": "${STARTED_AT}",
+            "completed_at": "${completed_at}",
+            "outcome": "${OUTCOME}"
+          }
+          EOF
+
+      - name: Upload immutable release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capstone-${{ github.sha }}-${{ github.run_id }}
+          path: release
+          if-no-files-found: error
+          retention-days: 30
