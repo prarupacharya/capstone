@@ -5,9 +5,9 @@ import { registerUser, type PublicUser, type RegistrationInput } from "../../api
 export type RegisterFormStatus = "ready" | "submitting" | "success" | "error";
 
 export interface RegisterFormProps {
-  onRegister?: (input: RegistrationInput) => Promise<PublicUser>;
-  initialStatus?: RegisterFormStatus;
-  initialMessage?: string;
+  readonly onRegister?: (input: RegistrationInput) => Promise<PublicUser>;
+  readonly initialStatus?: RegisterFormStatus;
+  readonly initialMessage?: string;
 }
 
 function getErrorMessage(error: unknown) {
@@ -82,8 +82,8 @@ export function RegisterForm({
         </button>
       </form>
 
-      {status === "submitting" && <p role="status">Creating your account...</p>}
-      {status === "success" && <p role="status">{message}</p>}
+      {status === "submitting" && <output>Creating your account...</output>}
+      {status === "success" && <output>{message}</output>}
       {status === "error" && <p role="alert">{message}</p>}
     </section>
   );

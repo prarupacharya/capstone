@@ -27,7 +27,7 @@ export function AuthPage() {
         <section className="auth-card auth-card--session" aria-labelledby="session-heading">
           <p className="eyebrow">Authenticated</p>
           <h2 id="session-heading">You&apos;re signed in</h2>
-          <p role="status">Your session is active in this browser tab.</p>
+          <output>Your session is active in this browser tab.</output>
           <button
             className="auth-secondary-button"
             type="button"

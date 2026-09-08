@@ -6,10 +6,10 @@ import { clearAccessToken, saveAccessToken } from "../../auth/session.js";
 export type LoginFormStatus = "ready" | "submitting" | "authenticated" | "error";
 
 export interface LoginFormProps {
-  onLogin?: (input: RegistrationInput) => Promise<LoginResult>;
-  onAuthenticated?: () => void;
-  initialStatus?: LoginFormStatus;
-  initialMessage?: string;
+  readonly onLogin?: (input: RegistrationInput) => Promise<LoginResult>;
+  readonly onAuthenticated?: () => void;
+  readonly initialStatus?: LoginFormStatus;
+  readonly initialMessage?: string;
 }
 
 function getErrorMessage(error: unknown) {
@@ -88,8 +88,8 @@ export function LoginForm({
         </button>
       </form>
 
-      {status === "submitting" && <p role="status">Logging you in...</p>}
-      {status === "authenticated" && <p role="status">{message}</p>}
+      {status === "submitting" && <output>Logging you in...</output>}
+      {status === "authenticated" && <output>{message}</output>}
       {status === "error" && <p role="alert">{message}</p>}
     </section>
   );
