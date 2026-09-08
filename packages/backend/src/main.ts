@@ -5,6 +5,7 @@ import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { parseBackendEnv, type BackendConfig } from "./config/env";
+import { AppLogger } from "./common/logging/app-logger";
 
 const envPath = resolve(__dirname, "../.env");
 if (existsSync(envPath)) process.loadEnvFile(envPath);
@@ -15,7 +16,7 @@ export function configureApp(app: Pick<INestApplication, "enableCors">, config: 
 
 export async function bootstrap() {
   const config = parseBackendEnv();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: new AppLogger() });
   configureApp(app, config);
   await app.listen(config.port);
 }
