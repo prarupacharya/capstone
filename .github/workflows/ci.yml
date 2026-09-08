@@ -53,3 +53,6 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:${{ job.services.postgres.ports[5432] }}/${{ env.POSTGRES_DB }}
         run: npm test
+
+      - name: Build Storybook
+        run: npm run build-storybook --workspace frontend
