@@ -26,7 +26,7 @@ export function BackendStatus() {
     };
   }, []);
 
-  if (state === "checking") return <p role="status">Checking backend...</p>;
+  if (state === "checking") return <output>Checking backend...</output>;
   if (state === "unavailable") return <p role="alert">Backend unavailable.</p>;
-  return <p role="status">Backend connected.</p>;
+  return <output>Backend connected.</output>;
 }
