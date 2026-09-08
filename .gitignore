@@ -3,6 +3,8 @@ dist/
 coverage/
 packages/backend/logs/
 packages/frontend/storybook-static/
+packages/frontend/playwright-report/
+packages/frontend/test-results/
 .env
 .env.*
 !.env.example
