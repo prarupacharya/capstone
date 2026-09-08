@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "npm run build && npm run test:config && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
+    "test:browser": "playwright test",
     "test:config": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --outDir dist/config-test src/config/env.ts && node --test test/env.test.mjs"
   },
   "dependencies": {
@@ -18,8 +20,10 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/react-vite": "^8.6.14",
+    "@playwright/test": "^1.51.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
