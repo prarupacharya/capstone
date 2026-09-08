@@ -1,6 +1,6 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { Pool, type PoolConfig } from "pg";
-import type { DatabaseConfig } from "./database.config";
+import { Pool } from "pg";
+import { getDatabasePoolConfig, type DatabaseConfig } from "./database.config";
 import { DATABASE_CONFIG } from "./database.tokens";
 
 @Injectable()
@@ -12,15 +12,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     if (!this.config.enabled) return;
 
-    const options: PoolConfig = {
-      host: this.config.host,
-      port: this.config.port,
-      database: this.config.name,
-      user: this.config.user,
-      password: this.config.password
-    };
-
-    this.pool = new Pool(options);
+    this.pool = new Pool(getDatabasePoolConfig(this.config));
     await this.pool.query("SELECT 1");
   }
 

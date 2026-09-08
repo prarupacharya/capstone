@@ -1,3 +1,5 @@
+import type { PoolConfig } from "pg";
+
 const DEFAULT_DATABASE_PORT = 5432;
 
 export interface DatabaseConfig {
@@ -34,5 +36,15 @@ export function parseDatabaseConfig(env: Record<string, string | undefined> = pr
     name: env.DATABASE_NAME?.trim() || "capstone",
     user: env.DATABASE_USER?.trim() || "capstone",
     password: env.DATABASE_PASSWORD ?? "capstone"
+  };
+}
+
+export function getDatabasePoolConfig(config: DatabaseConfig): PoolConfig {
+  return {
+    host: config.host,
+    port: config.port,
+    database: config.name,
+    user: config.user,
+    password: config.password
   };
 }
