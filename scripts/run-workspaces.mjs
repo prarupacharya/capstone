@@ -16,6 +16,9 @@ for (const name of readdirSync(packagesRoot)) {
   if (!manifest.scripts?.[script]) continue;
 
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const result = spawnSync(npm, ["run", script, "--workspace", name], { stdio: "inherit" });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  const result = spawnSync(npm, ["run", script, "--workspace", name], {
+    shell: process.platform === "win32",
+    stdio: "inherit"
+  });
+  if (result.error || result.status !== 0) process.exit(result.status ?? 1);
 }
