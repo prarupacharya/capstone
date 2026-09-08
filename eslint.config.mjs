@@ -1,8 +1,27 @@
+import tseslint from "typescript-eslint";
+
 export default [
   {
     ignores: ["node_modules/**"],
+  },
+  {
+    files: ["**/*.ts"],
     languageOptions: {
-      globals: { process: "readonly" }
+      parser: tseslint.parser,
+      parserOptions: { ecmaVersion: "latest", sourceType: "module" }
+    },
+    plugins: { "@typescript-eslint": tseslint.plugin },
+    rules: {
+      "no-undef": "off",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { "args": "none" }],
+      semi: ["error", "always"]
+    }
+  },
+  {
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: { fetch: "readonly", process: "readonly" }
     },
     rules: {
       "no-undef": "error",
