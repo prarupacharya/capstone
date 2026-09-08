@@ -10,7 +10,15 @@ export function BackendStatus() {
     let active = true;
 
     getHealth()
-      .then(() => active && setState("connected"))
+      .then(
+        (health) =>
+          active &&
+          setState(
+            health.status === "up" && health.backend === "up" && health.database === "up"
+              ? "connected"
+              : "unavailable"
+          )
+      )
       .catch(() => active && setState("unavailable"));
 
     return () => {

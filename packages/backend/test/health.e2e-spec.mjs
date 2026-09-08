@@ -20,9 +20,13 @@ after(async () => {
   await app.close();
 });
 
-test("GET /health returns the backend status", async () => {
+test("GET /health reports backend and database status", async () => {
   const response = await fetch(`${baseUrl}/health`);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { status: "ok", service: "backend" });
+  assert.deepEqual(await response.json(), {
+    status: "down",
+    backend: "up",
+    database: "down"
+  });
 });

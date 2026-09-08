@@ -26,7 +26,11 @@ test("shows connected state after a successful health request", async () => {
   let requestedUrl;
   const dom = loadApp(async (url) => {
     requestedUrl = String(url);
-    return { ok: true, status: 200, json: async () => ({ status: "ok", service: "backend" }) };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "up", backend: "up", database: "up" })
+    };
   });
 
   await settle(dom);
@@ -39,6 +43,18 @@ test("shows unavailable state when the health request fails", async () => {
   const dom = loadApp(async () => {
     throw new Error("backend offline");
   });
+
+  await settle(dom);
+
+  assert.equal(dom.window.document.querySelector("[role=alert]")?.textContent, "Backend unavailable.");
+});
+
+test("shows unavailable state when the database is down", async () => {
+  const dom = loadApp(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: "down", backend: "up", database: "down" })
+  }));
 
   await settle(dom);
 
