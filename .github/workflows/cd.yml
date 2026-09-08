@@ -53,8 +53,10 @@ jobs:
         env:
           COMMIT_SHA: ${{ github.sha }}
           REF_NAME: ${{ github.ref_name }}
+          PR_REF: ${{ github.event.pull_request.html_url || '' }}
           RUN_ID: ${{ github.run_id }}
           STARTED_AT: ${{ github.run_started_at }}
+          OUTCOME: ${{ job.status }}
         run: |
           completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -63,10 +65,11 @@ jobs:
             "environment": "dora",
             "commit_sha": "${COMMIT_SHA}",
             "ref": "${REF_NAME}",
+            "pull_request": "${PR_REF}",
             "run_id": "${RUN_ID}",
             "started_at": "${STARTED_AT}",
             "completed_at": "${completed_at}",
-            "outcome": "success"
+            "outcome": "${OUTCOME}"
           }
           EOF
 
