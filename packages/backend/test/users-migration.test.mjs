@@ -18,7 +18,7 @@ test("users migration defines the required columns and defaults", () => {
 
 test("users migration creates and removes the PostgreSQL schema", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const { Pool } = require("pg");
-  const pool = new Pool(process.env.TEST_DATABASE_URL);
+  const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
 
   try {
     await runUsersMigration(pool, "down");
