@@ -9,25 +9,29 @@
     "start:dev": "nest start --watch",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && node --test --test-concurrency=1 test/health.e2e-spec.mjs test/env.test.mjs test/database.config.test.mjs test/users-migration.test.mjs test/users.repository.test.mjs test/registration-validation.test.mjs test/register.e2e-spec.mjs test/login.e2e-spec.mjs test/jwt-auth.e2e-spec.mjs"
+    "test": "npm run build && node --test --test-concurrency=1 test/health.e2e-spec.mjs test/env.test.mjs test/database.config.test.mjs test/users-migration.test.mjs test/users.repository.test.mjs test/registration-validation.test.mjs test/register.e2e-spec.mjs test/login.e2e-spec.mjs test/jwt-auth.e2e-spec.mjs test/chat-gateway.e2e-spec.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.0.0",
+    "@nestjs/websockets": "^11.0.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
-    "@types/pg": "^8.11.10"
+    "@types/pg": "^8.11.10",
+    "socket.io-client": "^4.8.1"
   }
 }
