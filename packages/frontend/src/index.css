@@ -1,15 +1,126 @@
 :root {
   font-family: system-ui, sans-serif;
   color: #1f2937;
-  background: #f8fafc;
+  background: #eef2ff;
 }
 
 body {
   margin: 0;
+  min-width: 20rem;
+  background: #eef2ff;
 }
 
 main {
   max-width: 56rem;
   margin: 0 auto;
   padding: 4rem 1.5rem;
+}
+
+.auth-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
+  gap: 4rem;
+  align-items: center;
+  min-height: 30rem;
+}
+
+.auth-page__header {
+  max-width: 30rem;
+}
+
+.auth-page__header h1 {
+  margin: 0.25rem 0 0.75rem;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  letter-spacing: -0.06em;
+}
+
+.auth-page__header > p:last-child,
+.auth-card__intro > p:last-child {
+  color: #64748b;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.auth-card {
+  padding: 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: #ffffff;
+  box-shadow: 0 1.5rem 3rem rgb(30 41 59 / 0.1);
+}
+
+.auth-card__intro h2 {
+  margin: 0.5rem 0 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.auth-form label {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.auth-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.auth-form input:focus {
+  border-color: #4f46e5;
+  outline: 3px solid rgb(99 102 241 / 0.2);
+}
+
+.auth-form button {
+  margin-top: 1rem;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #ffffff;
+  background: #4f46e5;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.auth-form button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auth-card [role="status"],
+.auth-card [role="alert"] {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+}
+
+.auth-card [role="status"] {
+  color: #166534;
+}
+
+.auth-card [role="alert"] {
+  color: #b91c1c;
+}
+
+@media (max-width: 44rem) {
+  .auth-page {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    min-height: auto;
+  }
 }
