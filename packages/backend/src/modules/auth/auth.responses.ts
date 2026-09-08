@@ -8,6 +8,10 @@ export interface PublicUserResponse {
   userType: string;
 }
 
+export interface LoginResponse {
+  accessToken: string;
+}
+
 export function toPublicUserResponse(user: User): PublicUserResponse {
   return {
     id: user.id,
