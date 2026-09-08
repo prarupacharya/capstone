@@ -38,9 +38,11 @@ test("logs in, persists only the token in the tab, and logs out", async ({ page 
   await page.reload();
   await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
 
+  await page.evaluate(() => localStorage.setItem("capstone.accessToken", "legacy-token"));
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("button", { name: "Log in", exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => localStorage.getItem("capstone.accessToken"))).toBeNull();
 });
 
 test("shows generic login failure, clears the password, and stores no session", async ({ page }) => {

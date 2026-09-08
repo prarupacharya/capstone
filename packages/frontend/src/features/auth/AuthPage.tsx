@@ -20,14 +20,14 @@ export function AuthPage() {
     return (
       <main className="auth-page">
         <header className="auth-page__header">
-          <span className="eyebrow">Welcome to Capstone</span>
-          <h1>Capstone</h1>
-          <p>Frontend application shell is ready.</p>
+          {/* <span className="eyebrow">Welcome to Capstone</span> */}
+          <h1>LF-Chat</h1>
+          {/* <p>Frontend application shell is ready.</p> */}
         </header>
         <section className="auth-card auth-card--session" aria-labelledby="session-heading">
           <p className="eyebrow">Authenticated</p>
           <h2 id="session-heading">You&apos;re signed in</h2>
-          <p role="status">Your session is active in this browser tab.</p>
+          <output>Your session is active in this browser tab.</output>
           <button
             className="auth-secondary-button"
             type="button"
@@ -47,9 +47,9 @@ export function AuthPage() {
   return (
     <main className="auth-page">
       <header className="auth-page__header">
-        <span className="eyebrow">Welcome to Capstone</span>
-        <h1>Capstone</h1>
-        <p>Frontend application shell is ready.</p>
+        {/* <span className="eyebrow">Welcome to Capstone</span> */}
+        <h1>LF-Chat</h1>
+        {/* <p>Frontend application shell is ready.</p> */}
       </header>
       <div>
         <nav className="auth-nav" aria-label="Authentication">

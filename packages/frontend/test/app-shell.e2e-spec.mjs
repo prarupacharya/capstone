@@ -14,10 +14,7 @@ test("the production bundle renders the application shell", async () => {
   dom.window.eval(script);
   await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
 
-  assert.equal(dom.window.document.querySelector("title")?.textContent, "Capstone");
-  assert.equal(dom.window.document.querySelector("h1")?.textContent, "Capstone");
-  assert.equal(
-    dom.window.document.querySelector("p")?.textContent,
-    "Frontend application shell is ready."
-  );
+  assert.equal(dom.window.document.querySelector("title")?.textContent, "LF-Chat");
+  assert.equal(dom.window.document.querySelector("h1")?.textContent, "LF-Chat");
+  assert.equal(dom.window.document.querySelector("h2")?.textContent, "Create your account");
 });

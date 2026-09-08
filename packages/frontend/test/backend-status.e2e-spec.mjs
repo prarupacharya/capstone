@@ -36,7 +36,7 @@ test("shows connected state after a successful health request", async () => {
   await settle(dom);
 
   assert.equal(requestedUrl, "http://localhost:3000/health");
-  assert.equal(dom.window.document.querySelector("[role=status]")?.textContent, "Backend connected.");
+  assert.equal(dom.window.document.querySelector("output")?.textContent, "Backend connected.");
 });
 
 test("shows unavailable state when the health request fails", async () => {

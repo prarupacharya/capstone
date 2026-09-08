@@ -13,8 +13,8 @@ test("renders the application shell and reports the configured backend health", 
 
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Capstone" })).toBeVisible();
-  await expect(page.getByText("Frontend application shell is ready.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "LF-Chat", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveText("Backend connected.");
   expect(healthRequestUrl).toBe("http://localhost:3000/health");
 });
