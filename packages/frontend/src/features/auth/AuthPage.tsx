@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { request } from "../../api/client.js";
 import { clearAccessToken, hasAccessToken } from "../../auth/session.js";
 import { LoginForm } from "./LoginForm";
 import { RegisterForm } from "./RegisterForm";
@@ -8,6 +9,12 @@ type AuthMode = "register" | "login";
 export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("register");
   const [isAuthenticated, setIsAuthenticated] = useState(hasAccessToken);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    void request("/auth/me", undefined, { authenticated: true }).catch(() => undefined);
+  }, [isAuthenticated]);
 
   if (isAuthenticated) {
     return (
