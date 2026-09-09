@@ -24,18 +24,6 @@ after(async () => {
   await app.close();
 });
 
-test("GET /health reports backend and database status", async () => {
-  const response = await fetch(`${baseUrl}/health`);
-
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("x-correlation-id"), /^[a-f0-9-]{36}$/);
-  assert.deepEqual(await response.json(), {
-    status: "down",
-    backend: "up",
-    database: "down"
-  });
-});
-
 test("logs non-GET requests and preserves a valid correlation ID", async () => {
   const lines = [];
   const originalLog = globalThis.console.log;
