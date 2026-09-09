@@ -1,17 +1,44 @@
 import { useEffect, useState } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
+import { createChatSocket } from "../../realtime/chat-socket.js";
+import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
   readonly onLogout: () => void;
   readonly loadChatrooms?: () => Promise<ChatroomSummary[]>;
+  readonly createSocket?: () => Socket | null;
 };
 
-export function DashboardPage({ user, onLogout, loadChatrooms = listChatrooms }: DashboardPageProps) {
+export function DashboardPage({
+  user, onLogout, loadChatrooms = listChatrooms, createSocket = createChatSocket
+}: DashboardPageProps) {
   const [rooms, setRooms] = useState<ChatroomSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [connectionStatus, setConnectionStatus] = useState("connecting");
+
+  useEffect(() => {
+    const socket = createSocket();
+    if (!socket) {
+      setConnectionStatus("unavailable");
+      return;
+    }
+    const connected = () => setConnectionStatus("connected");
+    const disconnected = () => setConnectionStatus("disconnected");
+    const failed = () => setConnectionStatus("unavailable");
+    socket.on("connect", connected);
+    socket.on("disconnect", disconnected);
+    socket.on("connect_error", failed);
+    socket.connect();
+    return () => {
+      socket.off("connect", connected);
+      socket.off("disconnect", disconnected);
+      socket.off("connect_error", failed);
+      socket.disconnect();
+    };
+  }, [createSocket]);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +61,7 @@ export function DashboardPage({ user, onLogout, loadChatrooms = listChatrooms }:
       <header className="dashboard-header">
         <h1>Welcome to LF-Chat</h1>
         <h2 className="dashboard-header__user">{user.email}</h2>
+        <p className="connection-status" role="status">Chat: {connectionStatus}</p>
         <button className="auth-secondary-button" type="button" onClick={onLogout}>Log out</button>
       </header>
       <div className="dashboard-layout">
