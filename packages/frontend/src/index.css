@@ -163,6 +163,7 @@ main {
 .dashboard-shell { max-width: 72rem; padding-top: 2rem; padding-bottom: 2rem; }
 .dashboard-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
 .dashboard-header h1 { margin: 0 auto 0 0; }
+.connection-status { margin: 0; color: #64748b; font-size: 0.85rem; }
 .dashboard-layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); gap: 1rem; min-height: 28rem; }
 .room-sidebar, .chat-panel { padding: 1.25rem; border: 1px solid #e2e8f0; border-radius: 1rem; background: #fff; }
 .room-sidebar h2, .chat-panel h2 { margin-top: 0; }
