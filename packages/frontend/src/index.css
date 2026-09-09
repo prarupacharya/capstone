@@ -170,7 +170,13 @@ main {
 .room-list { display: grid; gap: 0.5rem; padding: 0; list-style: none; }
 .room-button { display: flex; justify-content: space-between; width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; background: #fff; cursor: pointer; font: inherit; text-align: left; }
 .room-button[aria-pressed="true"] { border-color: #4f46e5; background: #eef2ff; }
+.room-button__meta { display: inline-flex; gap: 0.5rem; align-items: center; }
 .room-button__count { color: #64748b; }
+.room-button__status { color: #3730a3; font-size: 0.8rem; font-weight: 700; }
+.join-dialog-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 45%); }
+.join-dialog { width: min(100%, 26rem); padding: 1.5rem; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem rgb(15 23 42 / 25%); }
+.join-dialog h2 { margin-top: 0; }
+.join-dialog__actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .chat-panel { display: flex; flex-direction: column; }
 .message-region { flex: 1; padding: 1rem; color: #64748b; background: #f8fafc; }
 .room-notification-list { display: grid; gap: 0.5rem; margin: 0 0 1rem; padding: 0; list-style: none; }

@@ -5,6 +5,7 @@ export interface ChatroomSummary {
   chatroomName: string;
   createdAt: string;
   numberOfUsers: number;
+  isMember?: boolean;
 }
 
 export async function listChatrooms(): Promise<ChatroomSummary[]> {

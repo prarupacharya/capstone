@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -49,14 +49,87 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
   expect(screen.getByRole("time").getAttribute("datetime")).toBe(generalMessage.createdAt);
   expect(screen.getByRole("textbox", { name: "Message" })).not.toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
-  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+  expect(fixture.emit.mock.calls.some(([event]) => event === "leaveRoom")).toBe(false);
   await waitFor(() => expect(screen.getByRole("heading", { name: "Support" })).not.toBeNull());
   expect(screen.queryByText("Welcome")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Log out" }));
   expect(onLogout).toHaveBeenCalledTimes(1);
+});
+
+test("prompts for an unjoined room and cancel preserves the current chat", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1, isMember: false }
+  ];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+
+  expect(screen.getByRole("dialog", { name: "Join Support?" })).not.toBeNull();
+  expect(fixture.emit).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("heading", { name: "General" })).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+});
+
+test("does not silently join when the catalog has no joined rooms", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: false }
+  ];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(screen.getByRole("button", { name: /General\s+2\s+Not joined/ })).not.toBeNull());
+  expect(fixture.emit).not.toHaveBeenCalled();
+});
+
+test("confirms an unjoined room and marks it joined only after acknowledgement", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1, isMember: false }
+  ];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Join chatroom" }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
+  expect(screen.getByRole("button", { name: /Support\s+1\s+Not joined/ })).not.toBeNull();
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+
+  expect(screen.getByRole("button", { name: /Support\s+1\s+Joined/ })).not.toBeNull();
+  expect(screen.getByRole("heading", { name: "Support" })).not.toBeNull();
+});
+
+test("keeps a failed first join unjoined and shows a safe error", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1, isMember: false }
+  ];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Join chatroom" }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void)({ ok: false, error: { code: "JOIN_FAILED", message: "Room unavailable" } }));
+
+  expect(screen.getByRole("alert").textContent).toBe("Room unavailable");
+  expect(screen.getByRole("button", { name: /Support\s+1\s+Not joined/ })).not.toBeNull();
+  expect(screen.getByRole("heading", { name: "Select a chatroom" })).not.toBeNull();
+  expect(fixture.emit.mock.calls.some(([event]) => event === "leaveRoom")).toBe(false);
 });
 
 test("ignores a late history acknowledgement from a former selection", async () => {
@@ -137,10 +210,8 @@ test("stops rendering messages from a room after switching away", async () => {
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
   await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
   fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
-  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
 
   await act(async () => fixture.trigger("newMessage", oldRoomMessage));
   await act(async () => fixture.trigger("newMessage", currentRoomMessage));
@@ -195,10 +266,8 @@ test("clears notifications when switching rooms and ignores later old-room event
   await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
   await act(async () => fixture.trigger("roomNotification", oldNotification));
   fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
-  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
   await act(async () => fixture.trigger("roomNotification", oldNotification));
   await act(async () => fixture.trigger("roomNotification", currentNotification));
 
