@@ -58,15 +58,23 @@ test("updates the visible room count from the socket without refetching", async 
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([
-        { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
-        { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
+        { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true },
+        { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1, isMember: false }
       ])
     });
   });
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Welcome to LF-Chat" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /General\s+2/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /General\s+4/ })).toBeVisible();
+  await page.getByRole("button", { name: /Support\s+1/ }).click();
+  await expect(page.getByRole("dialog", { name: "Join Support?" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await page.getByRole("button", { name: /Support\s+1/ }).click();
+  await page.getByRole("button", { name: "Join chatroom" }).click();
+  await expect(page.getByRole("heading", { name: "Support" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Support\s+1\s+Joined/ })).toBeVisible();
   expect(catalogRequests).toBe(1);
 });
