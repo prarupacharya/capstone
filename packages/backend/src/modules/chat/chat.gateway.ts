@@ -72,13 +72,51 @@ export class ChatGateway implements OnGatewayInit {
       }
 
       const messages = await this.chatsRepository.listLatestMessages(chatroomId);
-      if (presence.becameActive) this.emitJoinEvents(socket, chatroomId, user, presence.numberOfUsers);
+      if (presence.becameActive) {
+        this.emitPresenceEvent(
+          socket, chatroomId, user, "user_joined", `${user.email} joined the room`, presence.numberOfUsers
+        );
+      }
       return { ok: true, data: { chatroomId, messages } };
     } catch {
       if (membershipOpened) await this.userChatroomsRepository.endMembership(user.id, chatroomId);
       if (presenceJoined) this.roomPresenceService.leave(chatroomId, user.id, socket.id);
       if (socketJoined) await socket.leave(getChatroomSocketRoom(chatroomId));
       return this.failure("JOIN_FAILED", "Chatroom could not be joined");
+    }
+  }
+
+  @SubscribeMessage("leaveRoom")
+  async leaveRoom(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() payload: unknown
+  ): Promise<ChatEventAck<{ chatroomId: string }>> {
+    const user = (socket.data as { user?: WsAuthenticatedUser }).user;
+    if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
+
+    const chatroomId = this.getChatroomId(payload);
+    if (!chatroomId) return this.failure("INVALID_PAYLOAD", "A valid chatroomId is required");
+
+    try {
+      if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
+        return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
+      }
+      if (!this.roomPresenceService.hasSocket(chatroomId, user.id, socket.id)) {
+        return this.failure("NOT_MEMBER", "Socket is not a room member");
+      }
+
+      await socket.leave(getChatroomSocketRoom(chatroomId));
+      const presence = this.roomPresenceService.leave(chatroomId, user.id, socket.id);
+      if (presence.becameInactive) {
+        await this.userChatroomsRepository.endMembership(user.id, chatroomId);
+        this.emitPresenceEvent(
+          socket, chatroomId, user, "user_left", `${user.email} left the room`, presence.numberOfUsers
+        );
+      }
+
+      return { ok: true, data: { chatroomId } };
+    } catch {
+      return this.failure("LEAVE_FAILED", "Chatroom could not be left");
     }
   }
 
@@ -105,13 +143,20 @@ export class ChatGateway implements OnGatewayInit {
     return { ok: false, error: { code, message } };
   }
 
-  private emitJoinEvents(socket: Socket, chatroomId: string, user: WsAuthenticatedUser, numberOfUsers: number) {
+  private emitPresenceEvent(
+    socket: Socket,
+    chatroomId: string,
+    user: WsAuthenticatedUser,
+    type: RoomNotification["type"],
+    message: string,
+    numberOfUsers: number
+  ) {
     const notification: RoomNotification = {
       chatroomId,
-      type: "user_joined",
+      type,
       userId: user.id,
       identity: user.email,
-      message: `${user.email} joined the room`,
+      message,
       createdAt: new Date().toISOString()
     };
     const count: RoomUserCountUpdated = { chatroomId, numberOfUsers };
