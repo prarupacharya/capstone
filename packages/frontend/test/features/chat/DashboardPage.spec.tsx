@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { ChatHistoryMessage, JoinRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -56,6 +56,62 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
   expect(screen.queryByText("Welcome")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Log out" }));
   expect(onLogout).toHaveBeenCalledTimes(1);
+});
+
+test("leaves only the active room after one successful request", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1, isMember: true }
+  ];
+  const history: ChatHistoryMessage = { id: "message-1", chatroomId: "room-1", sender: "Ada", message: "Welcome", createdAt: "2026-01-01T12:00:00.000Z" };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [history] } }));
+  await act(async () => fixture.trigger("roomNotification", { chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin", message: "Lin joined", createdAt: "2026-01-01" } satisfies RoomNotification));
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "draft" } });
+  const leaveButton = screen.getByRole("button", { name: "Leave chatroom" });
+  fireEvent.click(leaveButton);
+  fireEvent.click(leaveButton);
+
+  const leaveCalls = fixture.emit.mock.calls.filter(([event]) => event === "leaveRoom");
+  expect(leaveCalls).toHaveLength(1);
+  expect(leaveCalls[0][1]).toEqual({ chatroomId: "room-1" });
+  expect(screen.getByRole("button", { name: "Leaving..." }).hasAttribute("disabled")).toBe(true);
+  await act(async () => (leaveCalls[0][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
+
+  expect(screen.getByRole("button", { name: /General\s+2\s+Not joined/ })).not.toBeNull();
+  expect(screen.getByRole("button", { name: /Support\s+1\s+Joined/ })).not.toBeNull();
+  expect(screen.queryByText("Welcome")).toBeNull();
+  expect(screen.queryByText("Lin joined")).toBeNull();
+  expect((screen.getByRole("textbox", { name: "Message" }) as HTMLInputElement).value).toBe("");
+  expect(screen.getByRole("heading", { name: "Select a chatroom" })).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Support/ }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
+});
+
+test("preserves the active room when leaving fails", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true }];
+  const history: ChatHistoryMessage = { id: "message-1", chatroomId: "room-1", sender: "Ada", message: "Keep me", createdAt: "2026-01-01" };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [history] } }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "unsent" } });
+  fireEvent.click(screen.getByRole("button", { name: "Leave chatroom" }));
+  const leaveAck = fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void;
+  await act(async () => leaveAck({ ok: false, error: { code: "LEAVE_FAILED", message: "Could not leave room" } }));
+
+  expect(screen.getByRole("alert").textContent).toBe("Could not leave room");
+  expect(screen.getByText("Keep me")).not.toBeNull();
+  expect((screen.getByRole("textbox", { name: "Message" }) as HTMLInputElement).value).toBe("unsent");
+  expect(screen.getByRole("button", { name: "Leave chatroom" }).hasAttribute("disabled")).toBe(false);
+  expect(screen.getByRole("button", { name: /General\s+2\s+Joined/ })).not.toBeNull();
 });
 
 test("prompts for an unjoined room and cancel preserves the current chat", async () => {
