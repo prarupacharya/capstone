@@ -1,19 +1,37 @@
 import type { Server, Socket } from "socket.io";
 import { ChatGateway } from "../src/modules/chat/chat.gateway";
+import type { ChatroomsRepository } from "../src/modules/chat/chatrooms.repository";
+import type { RoomPresenceService } from "../src/modules/chat/room-presence.service";
+import type { UserChatroomsRepository } from "../src/modules/chat/user-chatrooms.repository";
 import { WsJwtAuthService } from "../src/modules/chat/ws-jwt-auth.service";
 
 function createSocket(token?: unknown) {
   const auth = token === undefined ? {} : { token };
 
   return {
+    id: "socket-1",
     handshake: { auth },
-    data: {}
+    data: {},
+    join: jest.fn().mockResolvedValue(undefined),
+    leave: jest.fn().mockResolvedValue(undefined)
   } as unknown as Socket;
 }
 
 function createGateway() {
   const authService = { authenticate: jest.fn() };
-  const gateway = new ChatGateway(authService as unknown as WsJwtAuthService);
+  const chatroomsRepository = { findChatroomById: jest.fn() };
+  const roomPresenceService = {
+    hasSocket: jest.fn(),
+    join: jest.fn(),
+    leave: jest.fn()
+  };
+  const userChatroomsRepository = { beginMembership: jest.fn() };
+  const gateway = new ChatGateway(
+    authService as unknown as WsJwtAuthService,
+    chatroomsRepository as unknown as ChatroomsRepository,
+    roomPresenceService as unknown as RoomPresenceService,
+    userChatroomsRepository as unknown as UserChatroomsRepository
+  );
   const server = { use: jest.fn() } as unknown as Server;
 
   gateway.afterInit(server);
@@ -22,7 +40,7 @@ function createGateway() {
     next: (error?: Error) => void
   ) => void;
 
-  return { authService, gateway, middleware, server };
+  return { authService, chatroomsRepository, roomPresenceService, userChatroomsRepository, gateway, middleware, server };
 }
 
 const waitForAuthentication = () =>
@@ -58,5 +76,53 @@ describe("ChatGateway", () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Unauthorized" }));
     expect(next.mock.calls[0][0].message).not.toContain("token details");
+  });
+
+  it("joins an existing room and records first-user membership", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    roomPresenceService.join.mockReturnValue({ becameActive: true });
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toEqual({
+      ok: true, data: { chatroomId }
+    });
+    expect(socket.join).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
+    expect(userChatroomsRepository.beginMembership).toHaveBeenCalledWith("user-123", chatroomId);
+  });
+
+  it("rejects unauthenticated, malformed, and nonexistent joins", async () => {
+    const { gateway, chatroomsRepository } = createGateway();
+    const socket = createSocket("valid-token");
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toEqual({
+      ok: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" }
+    });
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    await expect(gateway.joinRoom(socket, { chatroomId: "not-a-uuid" })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_PAYLOAD" } });
+    chatroomsRepository.findChatroomById.mockResolvedValue(null);
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: false, error: { code: "ROOM_NOT_FOUND" } });
+  });
+
+  it("does not duplicate membership and rolls back a failed first join", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    roomPresenceService.join.mockReturnValue({ becameActive: true });
+    userChatroomsRepository.beginMembership.mockRejectedValue(new Error("database unavailable"));
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
+    expect(socket.join).not.toHaveBeenCalled();
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "JOIN_FAILED" }
+    });
+    expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
   });
 });
