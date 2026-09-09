@@ -28,7 +28,7 @@ export const Authenticated: Story = {
   }
 };
 
-export const Error: Story = {
+export const InvalidCredentials: Story = {
   args: {
     initialStatus: "error",
     initialMessage: "invalid email or password"

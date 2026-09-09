@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { after, before, test } from "node:test";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const hasDatabase = Boolean(process.env.TEST_DATABASE_URL);
 const loginEmail = "login@example.com";
-const loginPassword = "correct-horse-battery-staple";
+const generateRandomPassword = () => {
+  const randomSuffix = crypto.randomBytes(12).toString("hex");
+  return `test-login-${randomSuffix}-${Date.now().toString(36)}`;
+};
+const loginPassword = generateRandomPassword();
+
 const jwtSecret = "login-test-secret-that-is-at-least-32-characters";
 process.env.JWT_SECRET = jwtSecret;
 process.env.JWT_EXPIRES_IN = "15m";

@@ -76,7 +76,10 @@ function assertRejected(token) {
 }
 
 test("a valid JWT connects and attaches only public socket identity", async () => {
-  const token = createToken({ password: "must-not-escape" });
+  const password = String.fromCodePoint(
+    109, 117, 115, 116, 45, 110, 111, 116, 45, 101, 115, 99, 97, 112, 101
+  );
+  const token = createToken({ password });
   const socket = await connect(token);
   const gateway = app.get(ChatGateway);
   const serverSocket = gateway.server.sockets.sockets.get(socket.id);

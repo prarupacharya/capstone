@@ -44,7 +44,7 @@ export class JwtAuthGuard implements CanActivate {
   private getBearerToken(authorization: string | string[] | undefined) {
     if (typeof authorization !== "string") return null;
 
-    const match = authorization.match(/^Bearer\s+(\S+)$/i);
+    const match = /^Bearer\s+(\S+)$/i.exec(authorization);
     return match?.[1] ?? null;
   }
 
