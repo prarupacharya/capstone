@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { JoinRoomAck, LeaveRoomAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -27,15 +27,21 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
     { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
     { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
   ];
+  const generalMessage: ChatHistoryMessage = {
+    id: "message-1", chatroomId: "room-1", sender: "Ada", message: "Welcome", createdAt: "2026-01-01T12:00:00.000Z"
+  };
 
   render(<DashboardPage user={user} onLogout={onLogout} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
 
   expect(screen.getByRole("heading", { name: "Welcome to LF-Chat" })).not.toBeNull();
   await act(async () => fixture.socket.connect());
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
-  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [generalMessage] } }));
   await waitFor(() => expect(screen.getByRole("button", { name: /General\s+2/ })).not.toBeNull());
   expect(screen.getByRole("heading", { name: "General" })).not.toBeNull();
+  expect(screen.getByText("Ada")).not.toBeNull();
+  expect(screen.getByText("Welcome")).not.toBeNull();
+  expect(screen.getByRole("time").getAttribute("datetime")).toBe(generalMessage.createdAt);
   expect(screen.getByRole("textbox", { name: "Message" })).not.toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
@@ -43,8 +49,29 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
   await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
   await waitFor(() => expect(screen.getByRole("heading", { name: "Support" })).not.toBeNull());
+  expect(screen.queryByText("Welcome")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Log out" }));
   expect(onLogout).toHaveBeenCalledTimes(1);
+});
+
+test("ignores a late history acknowledgement from a former selection", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
+  ];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(2));
+  const oldAck = fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void;
+  const newAck = fixture.emit.mock.calls[1][2] as (ack: JoinRoomAck) => void;
+  await act(async () => oldAck({ ok: true, data: { chatroomId: "room-1", messages: [{ id: "old", chatroomId: "room-1", sender: "Ada", message: "Old room", createdAt: "2026-01-01T12:00:00.000Z" }] } }));
+  await act(async () => newAck({ ok: true, data: { chatroomId: "room-2", messages: [{ id: "new", chatroomId: "room-2", sender: "Lin", message: "Current room", createdAt: "2026-01-02T12:00:00.000Z" }] } }));
+  expect(screen.queryByText("Old room")).toBeNull();
+  expect(screen.getByText("Current room")).not.toBeNull();
 });
 
 test("shows empty and error room states without exposing error details", async () => {
