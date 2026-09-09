@@ -6,6 +6,10 @@ import { test } from "node:test";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(join(root, ".github", "workflows", "cd.yml"), "utf8");
+const ciWorkflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
+const backendPackage = JSON.parse(readFileSync(join(root, "packages/backend/package.json"), "utf8"));
+const sonarExample = readFileSync(join(root, ".sonar-project.properties.example"), "utf8");
+const sonarScript = readFileSync(join(root, "scripts/sonar.mjs"), "utf8");
 
 test("CD runs on main pushes and manual dispatch", () => {
   assert.match(workflow, /push:\s+branches: \[main\]/);
@@ -31,4 +35,12 @@ test("CD records an immutable artifact and DORA metadata", () => {
   assert.match(workflow, /github\.run_started_at/);
   assert.match(workflow, /completed_at/);
   assert.match(workflow, /job\.status/);
+});
+
+test("backend tests enforce and publish the coverage gate", () => {
+  assert.match(backendPackage.scripts.test, /test:coverage/);
+  assert.equal(backendPackage.scripts["test:node"], undefined);
+  assert.match(ciWorkflow, /test -f packages\/backend\/coverage\/lcov\.info/);
+  assert.match(sonarExample, /sonar\.javascript\.lcov\.reportPaths=packages\/backend\/coverage\/lcov\.info/);
+  assert.match(sonarScript, /test:coverage/);
 });
