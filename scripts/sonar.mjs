@@ -47,6 +47,9 @@ const run = (command, args, useShell = false) => new Promise((resolveRun, reject
 const coverageExit = await run(npmCommand, ['run', 'test:coverage', '--workspace', 'backend'], process.platform === 'win32');
 if (coverageExit !== 0) process.exit(coverageExit);
 
+const frontendCoverageExit = await run(npmCommand, ['run', 'test:coverage', '--workspace', 'frontend'], process.platform === 'win32');
+if (frontendCoverageExit !== 0) process.exit(frontendCoverageExit);
+
 const scannerPath = findCommand(scannerCommands);
 if (scannerPath) {
   const exitCode = await run(

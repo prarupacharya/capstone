@@ -11,7 +11,7 @@
     "build-storybook": "storybook build",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && npm run test:config && npm run test:api && npm run test:jest && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
+    "test": "npm run build && npm run test:config && npm run test:api && npm run test:coverage && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
     "test:jest": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand",
     "test:coverage": "npm run test:jest -- --coverage",
     "test:browser": "playwright test",

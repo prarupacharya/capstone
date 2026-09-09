@@ -19,6 +19,14 @@ module.exports = {
     "<rootDir>/src/**/*.{ts,tsx}",
     "!<rootDir>/src/**/*.stories.tsx"
   ],
+  coverageThreshold: {
+    global: {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90
+    }
+  },
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"]
 };

@@ -55,6 +55,7 @@ jobs:
         run: |
           npm test
           test -f packages/backend/coverage/lcov.info
+          test -f packages/frontend/coverage/lcov.info
 
       - name: Build Storybook
         run: npm run build-storybook --workspace frontend

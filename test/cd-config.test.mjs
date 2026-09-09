@@ -8,6 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(join(root, ".github", "workflows", "cd.yml"), "utf8");
 const ciWorkflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 const backendPackage = JSON.parse(readFileSync(join(root, "packages/backend/package.json"), "utf8"));
+const frontendPackage = JSON.parse(readFileSync(join(root, "packages/frontend/package.json"), "utf8"));
 const sonarExample = readFileSync(join(root, ".sonar-project.properties.example"), "utf8");
 const sonarScript = readFileSync(join(root, "scripts/sonar.mjs"), "utf8");
 
@@ -43,4 +44,12 @@ test("backend tests enforce and publish the coverage gate", () => {
   assert.match(ciWorkflow, /test -f packages\/backend\/coverage\/lcov\.info/);
   assert.match(sonarExample, /sonar\.javascript\.lcov\.reportPaths=packages\/backend\/coverage\/lcov\.info/);
   assert.match(sonarScript, /test:coverage/);
+});
+
+test("frontend tests enforce and publish the coverage gate", () => {
+  assert.match(frontendPackage.scripts.test, /test:coverage/);
+  assert.match(frontendPackage.scripts["test:coverage"], /--coverage/);
+  assert.match(ciWorkflow, /test -f packages\/frontend\/coverage\/lcov\.info/);
+  assert.match(sonarExample, /packages\/frontend\/coverage\/lcov\.info/);
+  assert.match(sonarScript, /test:coverage.*frontend/s);
 });
