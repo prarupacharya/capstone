@@ -1,27 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { ChatroomsRepository } from "./chatrooms.repository";
-import { RoomPresenceService } from "./room-presence.service";
-
-export interface ChatroomSummary {
-  id: string;
-  chatroomName: string;
-  createdAt: Date;
-  numberOfUsers: number;
-}
+import type { ChatroomSummary } from "./chatroom.types";
 
 @Injectable()
 export class ChatroomsService {
   constructor(
-    private readonly chatroomsRepository: ChatroomsRepository,
-    private readonly roomPresenceService: RoomPresenceService
+    private readonly chatroomsRepository: ChatroomsRepository
   ) {}
 
-  async listChatrooms(): Promise<ChatroomSummary[]> {
-    const rooms = await this.chatroomsRepository.listChatrooms();
-
-    return rooms.map((room) => ({
-      ...room,
-      numberOfUsers: this.roomPresenceService.getUserCount(room.id)
-    }));
+  async listChatrooms(userId: string): Promise<ChatroomSummary[]> {
+    return this.chatroomsRepository.listChatroomSummaries(userId);
   }
 }
