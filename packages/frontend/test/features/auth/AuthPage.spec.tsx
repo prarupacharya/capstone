@@ -58,7 +58,7 @@ describe("AuthPage", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Welcome to LF-Chat" })).not.toBeNull());
     expect(screen.getByRole("heading", { name: "user@example.com" })).not.toBeNull();
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBe(accessToken);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(String(fetchMock.mock.calls[1][0])).toBe("http://localhost:3000/auth/me");
 
     window.localStorage.setItem(ACCESS_TOKEN_KEY, "legacy-token");
@@ -80,7 +80,7 @@ describe("AuthPage", () => {
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Welcome to LF-Chat" })).not.toBeNull());
     expect(screen.getByRole("heading", { name: "user@example.com" })).not.toBeNull();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
     expect(headers.get("authorization")).toBe(`Bearer ${accessToken}`);
   });
