@@ -11,7 +11,9 @@
     "build-storybook": "storybook build",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && npm run test:config && npm run test:api && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
+    "test": "npm run build && npm run test:config && npm run test:api && npm run test:jest && node --test test/app-shell.e2e-spec.mjs test/backend-status.e2e-spec.mjs",
+    "test:jest": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand",
+    "test:coverage": "npm run test:jest -- --coverage",
     "test:browser": "playwright test",
     "test:config": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --outDir dist/config-test src/config/env.ts && node --test test/env.test.mjs",
     "test:api": "tsc --noEmit false --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --types vite/client --outDir dist/api-test src/config/env.ts src/api/api-error.ts src/api/client.ts src/api/auth.ts && node --test test/auth-api.test.mjs"
@@ -24,12 +26,16 @@
     "@playwright/test": "^1.51.1",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/react-vite": "^8.6.14",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "jsdom": "^25.0.0",
     "storybook": "^8.6.14",
+    "ts-jest": "^29.2.5",
     "vite": "^6.0.0"
   }
 }
