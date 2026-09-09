@@ -6,6 +6,7 @@ import { ChatroomsController } from "./chatrooms.controller";
 import { ChatroomsRepository } from "./chatrooms.repository";
 import { ChatroomsService } from "./chatrooms.service";
 import { RoomPresenceService } from "./room-presence.service";
+import { UserChatroomsRepository } from "./user-chatrooms.repository";
 import { WsJwtAuthService } from "./ws-jwt-auth.service";
 
 @Module({
@@ -16,8 +17,14 @@ import { WsJwtAuthService } from "./ws-jwt-auth.service";
     ChatroomsRepository,
     ChatroomsService,
     RoomPresenceService,
+    UserChatroomsRepository,
     WsJwtAuthService
   ],
-  exports: [ChatroomsRepository, ChatroomsService, RoomPresenceService]
+  exports: [
+    ChatroomsRepository,
+    ChatroomsService,
+    RoomPresenceService,
+    UserChatroomsRepository
+  ]
 })
 export class ChatModule {}
