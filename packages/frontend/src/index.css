@@ -176,6 +176,7 @@ main {
 .message-composer { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .message-composer input { flex: 1; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font: inherit; }
 .message-composer button { padding: 0.7rem 1rem; border: 0; border-radius: 0.5rem; color: #fff; background: #4f46e5; font: inherit; }
+.message-composer button:disabled { cursor: not-allowed; opacity: 0.65; }
 
 @media (max-width: 44rem) {
   .auth-page {
