@@ -13,8 +13,10 @@ import type {
   ChatEventAck,
   JoinRoomData,
   RoomNotification,
-  RoomUserCountUpdated
+  RoomUserCountUpdated,
+  SendMessagePayload
 } from "./chat-events.types";
+import type { ChatMessage } from "./chat-message.types";
 import { getChatroomSocketRoom } from "./chat-events.types";
 import { ChatsRepository } from "./chats.repository";
 import { RoomPresenceService } from "./room-presence.service";
@@ -121,6 +123,37 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage("sendMessage")
+  async sendMessage(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() payload: unknown
+  ): Promise<ChatEventAck<ChatMessage>> {
+    const user = (socket.data as { user?: WsAuthenticatedUser }).user;
+    if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
+
+    const input = this.getSendMessagePayload(payload);
+    if (!input) return this.failure("INVALID_PAYLOAD", "A valid message is required");
+
+    try {
+      if (!await this.chatroomsRepository.findChatroomById(input.chatroomId)) {
+        return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
+      }
+      if (!this.roomPresenceService.hasSocket(input.chatroomId, user.id, socket.id)) {
+        return this.failure("NOT_MEMBER", "Socket is not a room member");
+      }
+
+      const saved = await this.chatsRepository.saveMessage({
+        chatroomId: input.chatroomId,
+        fromUserId: user.id,
+        message: input.message
+      });
+      this.server.to(getChatroomSocketRoom(input.chatroomId)).emit("newMessage", saved);
+      return { ok: true, data: saved };
+    } catch {
+      return this.failure("MESSAGE_FAILED", "Message could not be sent");
+    }
+  }
+
   async handleDisconnect(socket: Socket) {
     const user = (socket.data as { user?: WsAuthenticatedUser }).user;
     const changes = this.roomPresenceService.disconnect(socket.id);
@@ -159,6 +192,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     return typeof chatroomId === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(chatroomId)
       ? chatroomId
+      : null;
+  }
+
+  private getSendMessagePayload(payload: unknown): SendMessagePayload | null {
+    if (!payload || typeof payload !== "object") return null;
+    const chatroomId = this.getChatroomId(payload);
+    const message = (payload as { message?: unknown }).message;
+    if (!chatroomId || typeof message !== "string") return null;
+
+    const trimmed = message.trim();
+    return trimmed.length > 0 && trimmed.length <= 2000
+      ? { chatroomId, message: trimmed }
       : null;
   }
 

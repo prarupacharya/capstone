@@ -22,7 +22,10 @@ function createSocket(token?: unknown) {
 function createGateway() {
   const authService = { authenticate: jest.fn() };
   const chatroomsRepository = { findChatroomById: jest.fn() };
-  const chatsRepository = { listLatestMessages: jest.fn().mockResolvedValue([]) };
+  const chatsRepository = {
+    listLatestMessages: jest.fn().mockResolvedValue([]),
+    saveMessage: jest.fn()
+  };
   const roomPresenceService = {
     hasSocket: jest.fn(),
     join: jest.fn(),
@@ -37,7 +40,11 @@ function createGateway() {
     roomPresenceService as unknown as RoomPresenceService,
     userChatroomsRepository as unknown as UserChatroomsRepository
   );
-  const server = { use: jest.fn(), emit: jest.fn() } as unknown as Server;
+  const server = {
+    use: jest.fn(),
+    emit: jest.fn(),
+    to: jest.fn().mockReturnValue({ emit: jest.fn() })
+  } as unknown as Server;
 
   gateway.afterInit(server);
   const middleware = (server.use as jest.Mock).mock.calls[0][0] as (
@@ -310,5 +317,75 @@ describe("ChatGateway", () => {
 
     expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
     expect(userChatroomsRepository.beginMembership).toHaveBeenCalledWith("user-123", chatroomId);
+  });
+
+  it("persists a trimmed message before broadcasting the saved record", async () => {
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    const saved = {
+      id: "message-1", chatroomId, sender: "user@example.com", message: "Hello",
+      createdAt: new Date("2026-01-01T00:00:00.000Z")
+    };
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(true);
+    chatsRepository.saveMessage.mockResolvedValue(saved);
+
+    await expect(gateway.sendMessage(socket, {
+      chatroomId, message: "  Hello  ", sender: "spoofed", createdAt: "spoofed"
+    })).resolves.toEqual({ ok: true, data: saved });
+
+    expect(chatsRepository.saveMessage).toHaveBeenCalledWith({
+      chatroomId, fromUserId: "user-123", message: "Hello"
+    });
+    expect((server.to as jest.Mock).mock.results[0].value.emit).toHaveBeenCalledWith("newMessage", saved);
+    expect(chatsRepository.saveMessage.mock.invocationCallOrder[0])
+      .toBeLessThan((server.to as jest.Mock).mock.invocationCallOrder[0]);
+  });
+
+  it("rejects invalid, nonexistent, and nonmember messages without broadcasting", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    const invalidPayloads = [
+      { chatroomId: "not-a-uuid", message: "Hello" },
+      { chatroomId, message: "   " },
+      { chatroomId, message: "x".repeat(2001) },
+      { chatroomId, message: 42 }
+    ];
+
+    for (const payload of invalidPayloads) {
+      await expect(gateway.sendMessage(socket, payload)).resolves.toMatchObject({
+        ok: false, error: { code: "INVALID_PAYLOAD" }
+      });
+    }
+    chatroomsRepository.findChatroomById.mockResolvedValue(null);
+    await expect(gateway.sendMessage(socket, { chatroomId, message: "Hello" })).resolves.toMatchObject({
+      ok: false, error: { code: "ROOM_NOT_FOUND" }
+    });
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    await expect(gateway.sendMessage(socket, { chatroomId, message: "Hello" })).resolves.toMatchObject({
+      ok: false, error: { code: "NOT_MEMBER" }
+    });
+    expect(chatsRepository.saveMessage).not.toHaveBeenCalled();
+    expect(server.to).not.toHaveBeenCalled();
+  });
+
+  it("does not broadcast when message persistence fails", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(true);
+    chatsRepository.saveMessage.mockRejectedValue(new Error("database unavailable"));
+
+    await expect(gateway.sendMessage(socket, { chatroomId, message: "Hello" })).resolves.toMatchObject({
+      ok: false, error: { code: "MESSAGE_FAILED" }
+    });
+    expect(server.to).not.toHaveBeenCalled();
   });
 });
