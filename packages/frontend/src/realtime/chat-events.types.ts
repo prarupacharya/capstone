@@ -28,6 +28,11 @@ export interface RoomNotification {
   createdAt: string;
 }
 
+export interface RoomUserCountUpdated {
+  chatroomId: string;
+  numberOfUsers: number;
+}
+
 export type JoinRoomAck = ChatEventAck<JoinRoomData>;
 export type LeaveRoomAck = ChatEventAck<LeaveRoomData>;
 export type SendMessageAck = ChatEventAck<ChatHistoryMessage>;
