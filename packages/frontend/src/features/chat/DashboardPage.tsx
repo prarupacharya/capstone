@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -36,6 +36,7 @@ export function DashboardPage({
   const [notifications, setNotifications] = useState<RoomNotification[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [sendError, setSendError] = useState<string>();
   const [pendingRoomId, setPendingRoomId] = useState<string>();
   const requestedJoinId = useRef<string>();
@@ -54,6 +55,7 @@ export function DashboardPage({
     const disconnected = () => {
       setConnectionStatus("disconnected");
       setIsConnected(false);
+      setLeaving(false);
       setActiveRoomId(undefined);
       setMessages([]);
       setNotifications([]);
@@ -171,6 +173,28 @@ export function DashboardPage({
     setPendingRoomId(undefined);
     setSelectedId(pendingRoomId);
   };
+  const leaveRoom = () => {
+    const chatroomId = activeRoomId;
+    if (!socket || !isConnected || !chatroomId || !selectedRoom ||
+      selectedRoom.id !== chatroomId || !isRoomMember(selectedRoom) || leaving) return;
+    setLeaving(true);
+    setRoomError(undefined);
+    socket.emit("leaveRoom", { chatroomId }, (ack: LeaveRoomAck) => {
+      setLeaving(false);
+      if (!ack.ok) {
+        setRoomError(ack.error.message);
+        return;
+      }
+      if (ack.data.chatroomId !== chatroomId) return;
+      setRooms((current) => current.map((room) => room.id === chatroomId ? { ...room, isMember: false } : room));
+      setSelectedId(undefined);
+      setActiveRoomId(undefined);
+      setMessages([]);
+      setNotifications([]);
+      setDraft("");
+      setSendError(undefined);
+    });
+  };
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = draft.trim();
@@ -200,14 +224,19 @@ export function DashboardPage({
           {status === "ready" && rooms.length === 0 && <p>No chatrooms available.</p>}
           {status === "ready" && rooms.length > 0 && <ul className="room-list">
             {rooms.map((room) => <li key={room.id}>
-              <button className="room-button" type="button" aria-pressed={room.id === activeRoomId} onClick={() => selectRoom(room)}>
+              <button className="room-button" type="button" disabled={leaving} aria-pressed={room.id === activeRoomId} onClick={() => selectRoom(room)}>
                 <span>{room.chatroomName}</span><span className="room-button__meta"><span className="room-button__count">{room.numberOfUsers}</span><span className="room-button__status">{isRoomMember(room) ? "Joined" : "Not joined"}</span></span>
               </button>
             </li>)}
           </ul>}
         </aside>
         <section className="chat-panel" aria-labelledby="selected-room-heading">
-          <h2 id="selected-room-heading">{selectedRoom?.id === activeRoomId ? selectedRoom?.chatroomName : "Select a chatroom"}</h2>
+          <div className="chat-panel__header">
+            <h2 id="selected-room-heading">{selectedRoom && selectedRoom.id === activeRoomId ? selectedRoom.chatroomName : "Select a chatroom"}</h2>
+            {selectedRoom && selectedRoom.id === activeRoomId && isRoomMember(selectedRoom) && <button
+              className="leave-chatroom-button" type="button" disabled={leaving} onClick={leaveRoom}
+            >{leaving ? "Leaving..." : "Leave chatroom"}</button>}
+          </div>
           {roomError && <p role="alert">{roomError}</p>}
           <div className="message-region" aria-label="Messages" aria-live="polite">
             {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">

@@ -178,6 +178,9 @@ main {
 .join-dialog h2 { margin-top: 0; }
 .join-dialog__actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .chat-panel { display: flex; flex-direction: column; }
+.chat-panel__header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.leave-chatroom-button { padding: 0.55rem 0.75rem; border: 1px solid #dc2626; border-radius: 0.5rem; color: #b91c1c; background: #fff; cursor: pointer; font: inherit; font-weight: 700; }
+.leave-chatroom-button:disabled { cursor: not-allowed; opacity: 0.65; }
 .message-region { flex: 1; padding: 1rem; color: #64748b; background: #f8fafc; }
 .room-notification-list { display: grid; gap: 0.5rem; margin: 0 0 1rem; padding: 0; list-style: none; }
 .room-notification { padding: 0.65rem 0.8rem; border-left: 3px solid #818cf8; color: #475569; background: #eef2ff; }
