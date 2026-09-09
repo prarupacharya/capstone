@@ -9,8 +9,7 @@
     "start:dev": "nest start --watch",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && npm run test:node && npm run test:jest",
-    "test:node": "node scripts/run-node-tests.mjs",
+    "test": "npm run build && npm run test:coverage",
     "test:jest": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage"
   },
