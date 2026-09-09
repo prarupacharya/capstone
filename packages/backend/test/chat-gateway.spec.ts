@@ -6,11 +6,11 @@ import type { RoomPresenceService } from "../src/modules/chat/room-presence.serv
 import type { UserChatroomsRepository } from "../src/modules/chat/user-chatrooms.repository";
 import { WsJwtAuthService } from "../src/modules/chat/ws-jwt-auth.service";
 
-function createSocket(token?: unknown) {
+function createSocket(token?: unknown, id = "socket-1") {
   const auth = token === undefined ? {} : { token };
 
   return {
-    id: "socket-1",
+    id,
     handshake: { auth },
     data: {},
     join: jest.fn().mockResolvedValue(undefined),
@@ -30,6 +30,7 @@ function createGateway() {
     hasSocket: jest.fn(),
     join: jest.fn(),
     leave: jest.fn(),
+    detachUserFromRoom: jest.fn(),
     disconnect: jest.fn()
   };
   const userChatroomsRepository = {
@@ -47,7 +48,8 @@ function createGateway() {
   const server = {
     use: jest.fn(),
     emit: jest.fn(),
-    to: jest.fn().mockReturnValue({ emit: jest.fn() })
+    to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+    in: jest.fn().mockReturnValue({ socketsLeave: jest.fn() })
   } as unknown as Server;
 
   gateway.afterInit(server);
@@ -240,7 +242,7 @@ describe("ChatGateway", () => {
   });
 
   it("rejects malformed, nonexistent, and nonmember leaves", async () => {
-    const { gateway, chatroomsRepository, roomPresenceService } = createGateway();
+    const { gateway, chatroomsRepository, userChatroomsRepository } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -253,26 +255,28 @@ describe("ChatGateway", () => {
       ok: false, error: { code: "ROOM_NOT_FOUND" }
     });
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
-    roomPresenceService.hasSocket.mockReturnValue(false);
+    userChatroomsRepository.endMembership.mockResolvedValue(false);
     await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({
       ok: false, error: { code: "NOT_MEMBER" }
     });
   });
 
-  it("leaves the final socket and announces the updated presence", async () => {
+  it("ends durable membership and announces the updated presence", async () => {
     const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
-    roomPresenceService.hasSocket.mockReturnValue(true);
-    roomPresenceService.leave.mockReturnValue({ becameInactive: true, numberOfUsers: 0 });
+    userChatroomsRepository.endMembership.mockResolvedValue(true);
+    userChatroomsRepository.countActiveMembers.mockResolvedValue(3);
+    roomPresenceService.detachUserFromRoom.mockReturnValue(["socket-1"]);
 
     await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toEqual({
       ok: true, data: { chatroomId }
     });
     expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
     expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect(roomPresenceService.detachUserFromRoom).toHaveBeenCalledWith(chatroomId, "user-123");
     expect((socket.to as jest.Mock).mock.results[0].value.emit).toHaveBeenCalledWith(
       "roomNotification",
       expect.objectContaining({
@@ -285,24 +289,47 @@ describe("ChatGateway", () => {
       })
     );
     expect(server.emit).toHaveBeenCalledWith(
-      "roomUserCountUpdated", { chatroomId, numberOfUsers: 0 }
+      "roomUserCountUpdated", { chatroomId, numberOfUsers: 3 }
     );
   });
 
-  it("only removes one socket when another tab remains active", async () => {
+  it("detaches every local socket for the room without touching other rooms", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const socket = createSocket("valid-token", "socket-1");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    userChatroomsRepository.endMembership.mockResolvedValue(true);
+    userChatroomsRepository.countActiveMembers.mockResolvedValue(1);
+    roomPresenceService.detachUserFromRoom.mockReturnValue(["socket-1", "socket-2"]);
+
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
+
+    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
+    expect(roomPresenceService.detachUserFromRoom).toHaveBeenCalledWith(chatroomId, "user-123");
+    expect(server.in).toHaveBeenCalledWith("socket-2");
+    expect((server.in as jest.Mock).mock.results[0].value.socketsLeave).toHaveBeenCalledWith(
+      `chatroom:${chatroomId}`
+    );
+    expect(server.emit).toHaveBeenCalledWith(
+      "roomUserCountUpdated", { chatroomId, numberOfUsers: 1 }
+    );
+  });
+
+  it("does not detach sockets when durable leave persistence fails", async () => {
     const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
-    roomPresenceService.hasSocket.mockReturnValue(true);
-    roomPresenceService.leave.mockReturnValue({ becameInactive: false, numberOfUsers: 1 });
+    userChatroomsRepository.endMembership.mockRejectedValue(new Error("database unavailable"));
 
-    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "LEAVE_FAILED" }
+    });
 
-    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
-    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
-    expect(socket.to).not.toHaveBeenCalled();
+    expect(roomPresenceService.detachUserFromRoom).not.toHaveBeenCalled();
+    expect(socket.leave).not.toHaveBeenCalled();
     expect(server.emit).not.toHaveBeenCalled();
   });
 
