@@ -107,6 +107,18 @@ export function DashboardPage({
   }, [isConnected, selectedId, socket]);
 
   useEffect(() => {
+    if (!socket || !isConnected || !activeRoomId) return;
+    const receiveMessage = (message: ChatHistoryMessage) => {
+      if (message.chatroomId !== activeRoomId) return;
+      setMessages((current) => current.some((existing) => existing.id === message.id)
+        ? current
+        : [...current, message]);
+    };
+    socket.on("newMessage", receiveMessage);
+    return () => { socket.off("newMessage", receiveMessage); };
+  }, [activeRoomId, isConnected, socket]);
+
+  useEffect(() => {
     let active = true;
     loadChatrooms()
       .then((loaded) => {
