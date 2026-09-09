@@ -42,4 +42,26 @@ export class ChatsRepository {
 
     return mapChatMessage(result.rows[0]);
   }
+
+  async listLatestMessages(chatroomId: string): Promise<ChatMessage[]> {
+    const result = await this.databaseService.getPool().query<ChatMessageRow>(
+      `
+        WITH latest AS (
+          SELECT chats.id, chats.chatroom_id, chats.message, chats.created_at,
+            COALESCE(users.username, users.email) AS sender
+          FROM chats
+          JOIN users ON users.id = chats.from_user_id
+          WHERE chats.chatroom_id = $1
+          ORDER BY chats.created_at DESC, chats.id DESC
+          LIMIT 50
+        )
+        SELECT id, chatroom_id, sender, message, created_at
+        FROM latest
+        ORDER BY created_at ASC, id ASC
+      `,
+      [chatroomId]
+    );
+
+    return result.rows.map(mapChatMessage);
+  }
 }
