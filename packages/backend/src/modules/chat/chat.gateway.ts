@@ -8,8 +8,9 @@ import {
 import type { Server, Socket } from "socket.io";
 import { ChatroomsRepository } from "./chatrooms.repository";
 import type { WsAuthenticatedUser } from "./ws-jwt-auth.service";
-import type { ChatEventAck } from "./chat-events.types";
+import type { ChatEventAck, JoinRoomData } from "./chat-events.types";
 import { getChatroomSocketRoom } from "./chat-events.types";
+import { ChatsRepository } from "./chats.repository";
 import { RoomPresenceService } from "./room-presence.service";
 import { UserChatroomsRepository } from "./user-chatrooms.repository";
 import { WsJwtAuthService } from "./ws-jwt-auth.service";
@@ -21,6 +22,7 @@ export class ChatGateway implements OnGatewayInit {
   constructor(
     private readonly wsJwtAuthService: WsJwtAuthService,
     private readonly chatroomsRepository: ChatroomsRepository,
+    private readonly chatsRepository: ChatsRepository,
     private readonly roomPresenceService: RoomPresenceService,
     private readonly userChatroomsRepository: UserChatroomsRepository
   ) {}
@@ -36,31 +38,40 @@ export class ChatGateway implements OnGatewayInit {
   async joinRoom(
     @ConnectedSocket() socket: Socket,
     @MessageBody() payload: unknown
-  ): Promise<ChatEventAck<{ chatroomId: string }>> {
+  ): Promise<ChatEventAck<JoinRoomData>> {
     const user = (socket.data as { user?: WsAuthenticatedUser }).user;
     if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
 
     const chatroomId = this.getChatroomId(payload);
     if (!chatroomId) return this.failure("INVALID_PAYLOAD", "A valid chatroomId is required");
 
+    let socketJoined = false;
+    let presenceJoined = false;
+    let membershipOpened = false;
     try {
       if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
         return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
       }
       if (this.roomPresenceService.hasSocket(chatroomId, user.id, socket.id)) {
-        return { ok: true, data: { chatroomId } };
+        const messages = await this.chatsRepository.listLatestMessages(chatroomId);
+        return { ok: true, data: { chatroomId, messages } };
       }
 
       await socket.join(getChatroomSocketRoom(chatroomId));
+      socketJoined = true;
       const presence = this.roomPresenceService.join(chatroomId, user.id, socket.id);
+      presenceJoined = true;
       if (presence.becameActive) {
         await this.userChatroomsRepository.beginMembership(user.id, chatroomId);
+        membershipOpened = true;
       }
 
-      return { ok: true, data: { chatroomId } };
+      const messages = await this.chatsRepository.listLatestMessages(chatroomId);
+      return { ok: true, data: { chatroomId, messages } };
     } catch {
-      this.roomPresenceService.leave(chatroomId, user.id, socket.id);
-      await socket.leave(getChatroomSocketRoom(chatroomId));
+      if (membershipOpened) await this.userChatroomsRepository.endMembership(user.id, chatroomId);
+      if (presenceJoined) this.roomPresenceService.leave(chatroomId, user.id, socket.id);
+      if (socketJoined) await socket.leave(getChatroomSocketRoom(chatroomId));
       return this.failure("JOIN_FAILED", "Chatroom could not be joined");
     }
   }
