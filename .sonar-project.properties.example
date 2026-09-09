@@ -8,4 +8,5 @@ sonar.sources=packages/backend/src,packages/frontend/src
 sonar.tests=test,packages/backend/test,packages/frontend/test
 sonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**
 sonar.test.inclusions=**/*.test.*,**/*.spec.*
+sonar.javascript.lcov.reportPaths=packages/backend/coverage/lcov.info
 sonar.sourceEncoding=UTF-8

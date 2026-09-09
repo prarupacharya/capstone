@@ -2,7 +2,7 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: ["node_modules/**", "storybook-static/**", "**/storybook-static/**"],
+    ignores: ["node_modules/**", "coverage/**", "**/coverage/**", "storybook-static/**", "**/storybook-static/**"],
   },
   {
     files: ["**/*.ts", "**/*.tsx"],

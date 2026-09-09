@@ -12,6 +12,8 @@ if (!existsSync(propertiesPath)) {
   process.exit(1);
 }
 
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
 const scannerCommands = process.platform === 'win32'
   ? ['sonar.bat', 'sonar-scanner.bat', 'sonar.cmd', 'sonar-scanner.cmd', 'sonar', 'sonar-scanner']
   : ['sonar', 'sonar-scanner'];
@@ -41,6 +43,9 @@ const run = (command, args, useShell = false) => new Promise((resolveRun, reject
   child.once('error', rejectRun);
   child.once('exit', (code, signal) => resolveRun(signal ? 1 : (code ?? 1)));
 });
+
+const coverageExit = await run(npmCommand, ['run', 'test:coverage', '--workspace', 'backend'], process.platform === 'win32');
+if (coverageExit !== 0) process.exit(coverageExit);
 
 const scannerPath = findCommand(scannerCommands);
 if (scannerPath) {
