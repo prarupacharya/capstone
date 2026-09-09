@@ -11,7 +11,7 @@ export interface JoinRoomData {
 
 export interface RoomNotification {
   chatroomId: string;
-  type: "user_joined";
+  type: "user_joined" | "user_left";
   userId: string;
   identity: string;
   message: string;
