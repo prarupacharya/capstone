@@ -1,38 +1,29 @@
 import type { ChatroomsRepository } from "../src/modules/chat/chatrooms.repository";
 import { ChatroomsService } from "../src/modules/chat/chatrooms.service";
-import type { RoomPresenceService } from "../src/modules/chat/room-presence.service";
+import type { ChatroomSummary } from "../src/modules/chat/chatroom.types";
 
 describe("ChatroomsService", () => {
-  it("combines persisted room metadata with live unique-user counts", async () => {
+  it("returns membership-aware summaries for the authenticated user", async () => {
     const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const rooms: ChatroomSummary[] = [
+      { id: "room-1", chatroomName: "General", createdAt, numberOfUsers: 2, isMember: true },
+      { id: "room-2", chatroomName: "Random", createdAt, numberOfUsers: 0, isMember: false }
+    ];
     const repository = {
-      listChatrooms: jest.fn().mockResolvedValue([
-        { id: "room-1", chatroomName: "General", createdAt },
-        { id: "room-2", chatroomName: "Random", createdAt }
-      ])
+      listChatroomSummaries: jest.fn().mockResolvedValue(rooms)
     };
-    const presence = { getUserCount: jest.fn().mockReturnValueOnce(2).mockReturnValueOnce(0) };
-    const service = new ChatroomsService(
-      repository as unknown as ChatroomsRepository,
-      presence as unknown as RoomPresenceService
-    );
+    const service = new ChatroomsService(repository as unknown as ChatroomsRepository);
 
-    await expect(service.listChatrooms()).resolves.toEqual([
-      { id: "room-1", chatroomName: "General", createdAt, numberOfUsers: 2 },
-      { id: "room-2", chatroomName: "Random", createdAt, numberOfUsers: 0 }
-    ]);
-    expect(repository.listChatrooms).toHaveBeenCalledTimes(1);
-    expect(presence.getUserCount).toHaveBeenNthCalledWith(1, "room-1");
-    expect(presence.getUserCount).toHaveBeenNthCalledWith(2, "room-2");
+    await expect(service.listChatrooms("user-1")).resolves.toBe(rooms);
+    expect(repository.listChatroomSummaries).toHaveBeenCalledWith("user-1");
   });
 
   it("does not replace repository failures with a fabricated catalog", async () => {
     const failure = new Error("database unavailable");
     const service = new ChatroomsService(
-      { listChatrooms: jest.fn().mockRejectedValue(failure) } as unknown as ChatroomsRepository,
-      { getUserCount: jest.fn() } as unknown as RoomPresenceService
+      { listChatroomSummaries: jest.fn().mockRejectedValue(failure) } as unknown as ChatroomsRepository
     );
 
-    await expect(service.listChatrooms()).rejects.toBe(failure);
+    await expect(service.listChatrooms("user-1")).rejects.toBe(failure);
   });
 });

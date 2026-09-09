@@ -8,12 +8,16 @@ const rows = [
   {
     id: "room-1",
     chatroom_name: "General",
-    created_at: new Date("2026-01-01T00:00:00.000Z")
+    created_at: new Date("2026-01-01T00:00:00.000Z"),
+    number_of_users: 2,
+    is_member: true
   },
   {
     id: "room-2",
     chatroom_name: "Random",
-    created_at: new Date("2026-01-02T00:00:00.000Z")
+    created_at: new Date("2026-01-02T00:00:00.000Z"),
+    number_of_users: 0,
+    is_member: false
   }
 ];
 
@@ -21,12 +25,17 @@ describe("ChatroomsRepository", () => {
   it("lists and maps rooms, and finds a room by parameterized id", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows })
+      .mockResolvedValueOnce({ rows })
       .mockResolvedValueOnce({ rows: [rows[0]] })
       .mockResolvedValueOnce({ rows: [] });
     const repository = new ChatroomsRepository({
       getPool: () => ({ query })
     } as unknown as DatabaseService);
 
+    await expect(repository.listChatroomSummaries("user-1")).resolves.toEqual([
+      { id: "room-1", chatroomName: "General", createdAt: rows[0].created_at, numberOfUsers: 2, isMember: true },
+      { id: "room-2", chatroomName: "Random", createdAt: rows[1].created_at, numberOfUsers: 0, isMember: false }
+    ]);
     await expect(repository.listChatrooms()).resolves.toEqual([
       { id: "room-1", chatroomName: "General", createdAt: rows[0].created_at },
       { id: "room-2", chatroomName: "Random", createdAt: rows[1].created_at }
@@ -38,9 +47,10 @@ describe("ChatroomsRepository", () => {
     });
     await expect(repository.findChatroomById("missing")).resolves.toBeNull();
 
-    expect(query).toHaveBeenNthCalledWith(1, expect.stringContaining("ORDER BY chatroom_name ASC, id ASC"));
-    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining("WHERE id = $1"), ["room-1"]);
-    expect(query).toHaveBeenNthCalledWith(3, expect.stringContaining("WHERE id = $1"), ["missing"]);
+    expect(query).toHaveBeenNthCalledWith(1, expect.stringContaining("BOOL_OR"), ["user-1"]);
+    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining("ORDER BY chatroom_name ASC, id ASC"));
+    expect(query).toHaveBeenNthCalledWith(3, expect.stringContaining("WHERE id = $1"), ["room-1"]);
+    expect(query).toHaveBeenNthCalledWith(4, expect.stringContaining("WHERE id = $1"), ["missing"]);
   });
 
   it("propagates database failures", async () => {
@@ -49,7 +59,7 @@ describe("ChatroomsRepository", () => {
       getPool: () => ({ query: jest.fn().mockRejectedValue(failure) })
     } as unknown as DatabaseService);
 
-    await expect(repository.listChatrooms()).rejects.toBe(failure);
+    await expect(repository.listChatroomSummaries("user-1")).rejects.toBe(failure);
   });
 
   const postgresTest = process.env.TEST_DATABASE_URL ? it : it.skip;
@@ -63,10 +73,29 @@ describe("ChatroomsRepository", () => {
       await runUsersMigration(pool);
       await runChatSchemaMigration(pool);
 
-      await expect(repository.listChatrooms()).resolves.toEqual([
-        expect.objectContaining({ chatroomName: "Development" }),
-        expect.objectContaining({ chatroomName: "General" }),
-        expect.objectContaining({ chatroomName: "Random" })
+      const user = await pool.query(
+        "INSERT INTO users (email, hashed_password) VALUES ($1, $2) RETURNING id",
+        ["catalog@example.com", "test-hash"]
+      );
+      const otherUser = await pool.query(
+        "INSERT INTO users (email, hashed_password) VALUES ($1, $2) RETURNING id",
+        ["other-catalog@example.com", "test-hash"]
+      );
+      const general = await pool.query("SELECT id FROM chatrooms WHERE chatroom_name = 'General'");
+      const random = await pool.query("SELECT id FROM chatrooms WHERE chatroom_name = 'Random'");
+      await pool.query(
+        "INSERT INTO user_chatrooms (user_id, chatroom_id) VALUES ($1, $2), ($3, $2), ($1, $4)",
+        [user.rows[0].id, general.rows[0].id, otherUser.rows[0].id, random.rows[0].id]
+      );
+      await pool.query(
+        "UPDATE user_chatrooms SET left_datetime = CURRENT_TIMESTAMP WHERE user_id = $1 AND chatroom_id = $2",
+        [user.rows[0].id, random.rows[0].id]
+      );
+
+      await expect(repository.listChatroomSummaries(user.rows[0].id)).resolves.toEqual([
+        expect.objectContaining({ chatroomName: "Development", numberOfUsers: 0, isMember: false }),
+        expect.objectContaining({ chatroomName: "General", numberOfUsers: 2, isMember: true }),
+        expect.objectContaining({ chatroomName: "Random", numberOfUsers: 0, isMember: false })
       ]);
     } finally {
       await runChatSchemaMigration(pool, "down");
