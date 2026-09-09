@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -204,6 +204,30 @@ test("clears notifications when switching rooms and ignores later old-room event
 
   expect(screen.queryByText("Lin joined General")).toBeNull();
   expect(screen.getByText("Lin joined Support")).not.toBeNull();
+});
+
+test("updates matching room counts without refetching and ignores unsafe updates", async () => {
+  const fixture = socketFixture();
+  const loadChatrooms = jest.fn(async () => [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
+  ] satisfies ChatroomSummary[]);
+  const { unmount } = render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={loadChatrooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  await act(async () => fixture.trigger("roomUserCountUpdated", { chatroomId: "room-1", numberOfUsers: 4 } satisfies RoomUserCountUpdated));
+
+  expect(screen.getByRole("button", { name: /General\s+4/ })).not.toBeNull();
+  expect(screen.getByRole("button", { name: /Support\s+1/ })).not.toBeNull();
+  expect(loadChatrooms).toHaveBeenCalledTimes(1);
+
+  await act(async () => fixture.trigger("roomUserCountUpdated", { chatroomId: "unknown", numberOfUsers: 99 } satisfies RoomUserCountUpdated));
+  await act(async () => fixture.trigger("roomUserCountUpdated", { chatroomId: "room-1", numberOfUsers: -1 } satisfies RoomUserCountUpdated));
+  expect(screen.getByRole("button", { name: /General\s+4/ })).not.toBeNull();
+  unmount();
+  expect(fixture.socket.off).toHaveBeenCalledWith("roomUserCountUpdated", expect.any(Function));
 });
 
 test("blocks whitespace and retains rejected message text", async () => {
