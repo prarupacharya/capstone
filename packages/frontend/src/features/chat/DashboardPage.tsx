@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -11,6 +11,11 @@ type DashboardPageProps = {
   readonly loadChatrooms?: () => Promise<ChatroomSummary[]>;
   readonly createSocket?: () => Socket | null;
 };
+
+function formatMessageTime(createdAt: string) {
+  const date = new Date(createdAt);
+  return Number.isNaN(date.getTime()) ? createdAt : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 
 export function DashboardPage({
   user, onLogout, loadChatrooms = listChatrooms, createSocket = createChatSocket
@@ -23,6 +28,7 @@ export function DashboardPage({
   const [isConnected, setIsConnected] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
+  const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
   const joinedRoomId = useRef<string>();
 
   useEffect(() => {
@@ -40,6 +46,8 @@ export function DashboardPage({
       joinedRoomId.current = undefined;
       setConnectionStatus("disconnected");
       setIsConnected(false);
+      setActiveRoomId(undefined);
+      setMessages([]);
     };
     const failed = () => setConnectionStatus("unavailable");
     currentSocket.on("connect", connected);
@@ -62,6 +70,7 @@ export function DashboardPage({
     const previousRoomId = joinedRoomId.current;
     setRoomError(undefined);
     setActiveRoomId(undefined);
+    setMessages([]);
 
     const join = () => {
       socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
@@ -70,8 +79,10 @@ export function DashboardPage({
           setRoomError(ack.error.message);
           return;
         }
+        if (ack.data.chatroomId !== selectedId) return;
         joinedRoomId.current = selectedId;
         setActiveRoomId(selectedId);
+        setMessages(ack.data.messages);
       });
     };
 
@@ -132,7 +143,14 @@ export function DashboardPage({
         <section className="chat-panel" aria-labelledby="selected-room-heading">
           <h2 id="selected-room-heading">{selectedRoom?.id === activeRoomId ? selectedRoom?.chatroomName : "Select a chatroom"}</h2>
           {roomError && <p role="alert">{roomError}</p>}
-          <div className="message-region" aria-live="polite"><p>No messages yet.</p></div>
+          <div className="message-region" aria-label="Messages" aria-live="polite">
+            {messages.length === 0 ? <p>No messages yet.</p> : <ol className="message-list">
+              {messages.map((message) => <li key={message.id}>
+                <strong>{message.sender}</strong><p>{message.message}</p>
+                <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+              </li>)}
+            </ol>}
+          </div>
           <form className="message-composer" onSubmit={(event) => event.preventDefault()}>
             <input aria-label="Message" placeholder="Type a message" disabled />
             <button type="submit" disabled>Send</button>
