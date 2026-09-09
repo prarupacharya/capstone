@@ -9,7 +9,10 @@
     "start:dev": "nest start --watch",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && node --test --test-concurrency=1 test/health.e2e-spec.mjs test/env.test.mjs test/database.config.test.mjs test/users-migration.test.mjs test/users.repository.test.mjs test/registration-validation.test.mjs test/register.e2e-spec.mjs test/login.e2e-spec.mjs test/jwt-auth.e2e-spec.mjs test/chat-gateway.e2e-spec.mjs"
+    "test": "npm run build && npm run test:node && npm run test:jest",
+    "test:node": "node scripts/run-node-tests.mjs",
+    "test:jest": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -30,8 +33,11 @@
     "@nestjs/cli": "^11.0.0",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.10",
-    "socket.io-client": "^4.8.1"
+    "jest": "^29.7.0",
+    "socket.io-client": "^4.8.1",
+    "ts-jest": "^29.2.5"
   }
 }
