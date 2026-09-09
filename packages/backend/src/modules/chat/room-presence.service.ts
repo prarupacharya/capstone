@@ -64,6 +64,12 @@ export class RoomPresenceService {
     };
   }
 
+  detachUserFromRoom(roomId: string, userId: string): string[] {
+    const socketIds = [...(this.rooms.get(roomId)?.get(userId) ?? [])];
+    for (const socketId of socketIds) this.leave(roomId, userId, socketId);
+    return socketIds;
+  }
+
   disconnect(socketId: string): PresenceChange[] {
     const socketRooms = this.sockets.get(socketId);
     if (!socketRooms) return [];
