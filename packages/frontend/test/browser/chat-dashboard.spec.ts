@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 
 const httpServer = createServer();
 const socketServer = new SocketServer(httpServer, { cors: { origin: "*" } });
+const leftRoomIds: string[] = [];
 let socketPort: number;
 
 socketServer.on("connection", (socket) => {
@@ -12,6 +13,11 @@ socketServer.on("connection", (socket) => {
     const chatroomId = payload.chatroomId ?? "";
     acknowledge({ ok: true, data: { chatroomId, messages: [] } });
     setTimeout(() => socket.emit("roomUserCountUpdated", { chatroomId, numberOfUsers: 4 }), 100);
+  });
+  socket.on("leaveRoom", (payload: { chatroomId?: string }, acknowledge: (response: unknown) => void) => {
+    const chatroomId = payload.chatroomId ?? "";
+    leftRoomIds.push(chatroomId);
+    acknowledge({ ok: true, data: { chatroomId } });
   });
 });
 
@@ -76,5 +82,13 @@ test("updates the visible room count from the socket without refetching", async 
   await page.getByRole("button", { name: "Join chatroom" }).click();
   await expect(page.getByRole("heading", { name: "Support" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Support\s+1\s+Joined/ })).toBeVisible();
+  expect(leftRoomIds).toEqual([]);
+  await page.getByRole("button", { name: "Leave chatroom" }).click();
+  await expect(page.getByRole("heading", { name: "Select a chatroom" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Support\s+\d+\s+Not joined/ })).toBeVisible();
+  expect(leftRoomIds).toEqual(["room-2"]);
+  await page.getByRole("button", { name: /General\s+4\s+Joined/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
   expect(catalogRequests).toBe(1);
 });
