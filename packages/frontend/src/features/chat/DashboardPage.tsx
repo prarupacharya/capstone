@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -15,6 +15,10 @@ type DashboardPageProps = {
 function formatMessageTime(createdAt: string) {
   const date = new Date(createdAt);
   return Number.isNaN(date.getTime()) ? createdAt : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function isRoomMember(room: ChatroomSummary) {
+  return room.isMember !== false;
 }
 
 export function DashboardPage({
@@ -33,7 +37,8 @@ export function DashboardPage({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
-  const joinedRoomId = useRef<string>();
+  const [pendingRoomId, setPendingRoomId] = useState<string>();
+  const requestedJoinId = useRef<string>();
 
   useEffect(() => {
     const currentSocket = createSocket();
@@ -47,7 +52,6 @@ export function DashboardPage({
       setIsConnected(true);
     };
     const disconnected = () => {
-      joinedRoomId.current = undefined;
       setConnectionStatus("disconnected");
       setIsConnected(false);
       setActiveRoomId(undefined);
@@ -72,7 +76,8 @@ export function DashboardPage({
   useEffect(() => {
     if (!socket || !isConnected || !selectedId) return;
     let active = true;
-    const previousRoomId = joinedRoomId.current;
+    const selectedRoom = rooms.find((room) => room.id === selectedId);
+    if (!selectedRoom || !isRoomMember(selectedRoom) && requestedJoinId.current !== selectedId) return;
     setRoomError(undefined);
     setSendError(undefined);
     setActiveRoomId(undefined);
@@ -83,28 +88,19 @@ export function DashboardPage({
       socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
         if (!active) return;
         if (!ack.ok) {
+          requestedJoinId.current = undefined;
           setRoomError(ack.error.message);
           return;
         }
         if (ack.data.chatroomId !== selectedId) return;
-        joinedRoomId.current = selectedId;
+        requestedJoinId.current = undefined;
+        setRooms((current) => current.map((room) => room.id === selectedId ? { ...room, isMember: true } : room));
         setActiveRoomId(selectedId);
         setMessages(ack.data.messages);
       });
     };
 
-    if (!previousRoomId || previousRoomId === selectedId) {
-      join();
-    } else {
-      socket.emit("leaveRoom", { chatroomId: previousRoomId }, (ack: LeaveRoomAck) => {
-        if (!active) return;
-        if (ack.ok) {
-          joinedRoomId.current = undefined;
-          join();
-        }
-        else setRoomError(ack.error.message);
-      });
-    }
+    join();
 
     return () => { active = false; };
   }, [isConnected, selectedId, socket]);
@@ -150,7 +146,9 @@ export function DashboardPage({
         if (!active) return;
         const nextRooms = Array.isArray(loaded) ? loaded : [];
         setRooms(nextRooms);
-        setSelectedId((current) => nextRooms.some((room) => room.id === current) ? current : nextRooms[0]?.id);
+        setSelectedId((current) => nextRooms.some((room) => room.id === current && isRoomMember(room))
+          ? current
+          : nextRooms.find(isRoomMember)?.id);
         setStatus("ready");
       })
       .catch(() => active && setStatus("error"));
@@ -158,6 +156,21 @@ export function DashboardPage({
   }, [loadChatrooms]);
 
   const selectedRoom = rooms.find((room) => room.id === selectedId);
+  const pendingRoom = rooms.find((room) => room.id === pendingRoomId);
+  const selectRoom = (room: ChatroomSummary) => {
+    if (!isRoomMember(room)) {
+      setPendingRoomId(room.id);
+      return;
+    }
+    requestedJoinId.current = undefined;
+    setSelectedId(room.id);
+  };
+  const confirmJoin = () => {
+    if (!pendingRoomId) return;
+    requestedJoinId.current = pendingRoomId;
+    setPendingRoomId(undefined);
+    setSelectedId(pendingRoomId);
+  };
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = draft.trim();
@@ -187,8 +200,8 @@ export function DashboardPage({
           {status === "ready" && rooms.length === 0 && <p>No chatrooms available.</p>}
           {status === "ready" && rooms.length > 0 && <ul className="room-list">
             {rooms.map((room) => <li key={room.id}>
-              <button className="room-button" type="button" aria-pressed={room.id === activeRoomId} onClick={() => setSelectedId(room.id)}>
-                <span>{room.chatroomName}</span><span className="room-button__count">{room.numberOfUsers}</span>
+              <button className="room-button" type="button" aria-pressed={room.id === activeRoomId} onClick={() => selectRoom(room)}>
+                <span>{room.chatroomName}</span><span className="room-button__meta"><span className="room-button__count">{room.numberOfUsers}</span><span className="room-button__status">{isRoomMember(room) ? "Joined" : "Not joined"}</span></span>
               </button>
             </li>)}
           </ul>}
@@ -222,6 +235,16 @@ export function DashboardPage({
           </form>
         </section>
       </div>
+      {pendingRoom && <div className="join-dialog-backdrop">
+        <div className="join-dialog" role="dialog" aria-modal="true" aria-labelledby="join-room-heading" aria-describedby="join-room-description">
+          <h2 id="join-room-heading">Join {pendingRoom.chatroomName}?</h2>
+          <p id="join-room-description">Join this group chat to view and send messages.</p>
+          <div className="join-dialog__actions">
+            <button className="auth-secondary-button" type="button" onClick={() => setPendingRoomId(undefined)}>Cancel</button>
+            <button type="button" onClick={confirmJoin}>Join chatroom</button>
+          </div>
+        </div>
+      </div>}
     </main>
   );
 }
