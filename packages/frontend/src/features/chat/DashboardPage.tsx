@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
+import type { JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -18,27 +19,77 @@ export function DashboardPage({
   const [selectedId, setSelectedId] = useState<string>();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [connectionStatus, setConnectionStatus] = useState("connecting");
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [activeRoomId, setActiveRoomId] = useState<string>();
+  const [roomError, setRoomError] = useState<string>();
+  const joinedRoomId = useRef<string>();
 
   useEffect(() => {
-    const socket = createSocket();
-    if (!socket) {
+    const currentSocket = createSocket();
+    setSocket(currentSocket);
+    if (!currentSocket) {
       setConnectionStatus("unavailable");
       return;
     }
-    const connected = () => setConnectionStatus("connected");
-    const disconnected = () => setConnectionStatus("disconnected");
+    const connected = () => {
+      setConnectionStatus("connected");
+      setIsConnected(true);
+    };
+    const disconnected = () => {
+      joinedRoomId.current = undefined;
+      setConnectionStatus("disconnected");
+      setIsConnected(false);
+    };
     const failed = () => setConnectionStatus("unavailable");
-    socket.on("connect", connected);
-    socket.on("disconnect", disconnected);
-    socket.on("connect_error", failed);
-    socket.connect();
+    currentSocket.on("connect", connected);
+    currentSocket.on("disconnect", disconnected);
+    currentSocket.on("connect_error", failed);
+    currentSocket.connect();
     return () => {
-      socket.off("connect", connected);
-      socket.off("disconnect", disconnected);
-      socket.off("connect_error", failed);
-      socket.disconnect();
+      currentSocket.off("connect", connected);
+      currentSocket.off("disconnect", disconnected);
+      currentSocket.off("connect_error", failed);
+      currentSocket.disconnect();
+      setSocket(null);
+      setIsConnected(false);
     };
   }, [createSocket]);
+
+  useEffect(() => {
+    if (!socket || !isConnected || !selectedId) return;
+    let active = true;
+    const previousRoomId = joinedRoomId.current;
+    setRoomError(undefined);
+    setActiveRoomId(undefined);
+
+    const join = () => {
+      socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
+        if (!active) return;
+        if (!ack.ok) {
+          setRoomError(ack.error.message);
+          return;
+        }
+        joinedRoomId.current = selectedId;
+        setActiveRoomId(selectedId);
+      });
+    };
+
+    if (!previousRoomId || previousRoomId === selectedId) {
+      join();
+    } else {
+      socket.emit("leaveRoom", { chatroomId: previousRoomId }, (ack: LeaveRoomAck) => {
+        if (!active) return;
+        if (ack.ok) {
+          joinedRoomId.current = undefined;
+          join();
+        }
+        else setRoomError(ack.error.message);
+      });
+    }
+
+    return () => { active = false; };
+  }, [isConnected, selectedId, socket]);
 
   useEffect(() => {
     let active = true;
@@ -72,14 +123,15 @@ export function DashboardPage({
           {status === "ready" && rooms.length === 0 && <p>No chatrooms available.</p>}
           {status === "ready" && rooms.length > 0 && <ul className="room-list">
             {rooms.map((room) => <li key={room.id}>
-              <button className="room-button" type="button" aria-pressed={room.id === selectedId} onClick={() => setSelectedId(room.id)}>
+              <button className="room-button" type="button" aria-pressed={room.id === activeRoomId} onClick={() => setSelectedId(room.id)}>
                 <span>{room.chatroomName}</span><span className="room-button__count">{room.numberOfUsers}</span>
               </button>
             </li>)}
           </ul>}
         </aside>
         <section className="chat-panel" aria-labelledby="selected-room-heading">
-          <h2 id="selected-room-heading">{selectedRoom?.chatroomName ?? "Select a chatroom"}</h2>
+          <h2 id="selected-room-heading">{selectedRoom?.id === activeRoomId ? selectedRoom?.chatroomName : "Select a chatroom"}</h2>
+          {roomError && <p role="alert">{roomError}</p>}
           <div className="message-region" aria-live="polite"><p>No messages yet.</p></div>
           <form className="message-composer" onSubmit={(event) => event.preventDefault()}>
             <input aria-label="Message" placeholder="Type a message" disabled />
