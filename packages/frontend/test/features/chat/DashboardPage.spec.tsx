@@ -1,7 +1,8 @@
 import { afterEach, expect, jest, test } from "@jest/globals";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
+import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
 
@@ -32,4 +33,21 @@ test("shows empty and error room states without exposing error details", async (
   rerender(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => { throw new Error("Bearer secret-token"); }} />);
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("could not be loaded"));
   expect(screen.queryByText("secret-token")).toBeNull();
+});
+
+test("connects once and disconnects with the authenticated dashboard", async () => {
+  const on = jest.fn();
+  const socket = { on, off: jest.fn(), connect: jest.fn(), disconnect: jest.fn() } as unknown as Socket;
+  const { unmount } = render(
+    <DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => []} createSocket={() => socket} />
+  );
+
+  await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
+  expect(screen.getByText("Chat: connecting")).not.toBeNull();
+  const failed = on.mock.calls.find(([event]) => event === "connect_error")?.[1] as () => void;
+  await act(async () => failed());
+  expect(screen.getByRole("status").textContent).toContain("unavailable");
+  unmount();
+  expect(socket.off).toHaveBeenCalledTimes(3);
+  expect(socket.disconnect).toHaveBeenCalledTimes(1);
 });
