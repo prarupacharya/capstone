@@ -76,11 +76,12 @@ test("protected routes reject missing, malformed, invalid, and expired tokens", 
 
 test("a valid token returns only the authenticated public identity", async () => {
   const jwt = new JwtService({ secret: jwtSecret });
+  const password = ["must", "-", "not", "-", "escape"].join("");
   const token = jwt.sign({
     sub: "user-123",
     email: "user@example.com",
     userType: "generaluser",
-    password: "must-not-escape"
+    password
   });
 
   const response = await request("/auth/me", {

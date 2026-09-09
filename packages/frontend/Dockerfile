@@ -15,6 +15,12 @@ RUN npm run build --workspace frontend
 
 FROM nginx:1.27-alpine
 
-COPY --from=build /app/packages/frontend/dist /usr/share/nginx/html
+COPY --from=build --chown=root:root --chmod=0555 /app/packages/frontend/dist /usr/share/nginx/html
 
-EXPOSE 80
+RUN sed -i 's/listen[[:space:]]*80;/listen 8080;/' /etc/nginx/conf.d/default.conf \
+	&& sed -i 's|/var/run/nginx.pid|/tmp/nginx.pid|' /etc/nginx/nginx.conf \
+	&& chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+
+USER nginx
+
+EXPOSE 8080

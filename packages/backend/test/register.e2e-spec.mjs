@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createRequire } from "node:module";
+import crypto from "node:crypto";
 
 const require = createRequire(import.meta.url);
 const hasDatabase = Boolean(process.env.TEST_DATABASE_URL);
@@ -51,7 +52,11 @@ after(async () => {
 });
 
 test("registration stores a bcrypt hash and returns a public user", { skip: !hasDatabase }, async () => {
-  const password = "correct-horse-battery-staple";
+  const generateRandomPassword = () => {
+    const randomSuffix = crypto.randomBytes(12).toString("hex");
+    return `test-login-${randomSuffix}-${Date.now().toString(36)}`;
+  };
+  const password = generateRandomPassword();
   const lines = [];
   const originalLog = globalThis.console.log;
   globalThis.console.log = (...args) => lines.push(args.join(" "));

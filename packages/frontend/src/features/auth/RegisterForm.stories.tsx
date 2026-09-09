@@ -28,7 +28,7 @@ export const Success: Story = {
   }
 };
 
-export const Error: Story = {
+export const RegistrationError: Story = {
   args: {
     initialStatus: "error",
     initialMessage: "email is already registered"
