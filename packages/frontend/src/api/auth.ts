@@ -17,6 +17,12 @@ export interface LoginResult {
   accessToken: string;
 }
 
+export interface CurrentUser {
+  id: string;
+  email: string;
+  userType: string;
+}
+
 function credentialsBody(input: RegistrationInput) {
   return JSON.stringify({ email: input.email, password: input.password });
 }
@@ -39,4 +45,9 @@ export async function loginUser(input: RegistrationInput): Promise<LoginResult> 
   });
 
   return response.json() as Promise<LoginResult>;
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const response = await request("/auth/me", undefined, { authenticated: true });
+  return response.json() as Promise<CurrentUser>;
 }
