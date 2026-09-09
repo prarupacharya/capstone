@@ -32,7 +32,11 @@ function createGateway() {
     leave: jest.fn(),
     disconnect: jest.fn()
   };
-  const userChatroomsRepository = { beginMembership: jest.fn(), endMembership: jest.fn() };
+  const userChatroomsRepository = {
+    beginMembership: jest.fn(),
+    countActiveMembers: jest.fn(),
+    endMembership: jest.fn()
+  };
   const gateway = new ChatGateway(
     authService as unknown as WsJwtAuthService,
     chatroomsRepository as unknown as ChatroomsRepository,
@@ -100,6 +104,8 @@ describe("ChatGateway", () => {
     chatsRepository.listLatestMessages.mockResolvedValue(messages);
     roomPresenceService.hasSocket.mockReturnValue(false);
     roomPresenceService.join.mockReturnValue({ becameActive: true, numberOfUsers: 1 });
+    userChatroomsRepository.beginMembership.mockResolvedValue(true);
+    userChatroomsRepository.countActiveMembers.mockResolvedValue(1);
 
     await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toEqual({
       ok: true, data: { chatroomId, messages }
@@ -121,6 +127,23 @@ describe("ChatGateway", () => {
     expect((server.emit as jest.Mock)).toHaveBeenCalledWith(
       "roomUserCountUpdated", { chatroomId, numberOfUsers: 1 }
     );
+  });
+
+  it("reopens an existing membership without announcing a new join", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    roomPresenceService.join.mockReturnValue({ becameActive: true, numberOfUsers: 4 });
+    userChatroomsRepository.beginMembership.mockResolvedValue(false);
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
+
+    expect(userChatroomsRepository.beginMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect(userChatroomsRepository.countActiveMembers).not.toHaveBeenCalled();
+    expect(server.emit).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated, malformed, and nonexistent joins", async () => {
@@ -147,12 +170,11 @@ describe("ChatGateway", () => {
     roomPresenceService.join.mockReturnValue({ becameActive: true });
     userChatroomsRepository.beginMembership.mockRejectedValue(new Error("database unavailable"));
 
-    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
-    expect(socket.join).not.toHaveBeenCalled();
     await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({
       ok: false, error: { code: "JOIN_FAILED" }
     });
-    expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(roomPresenceService.leave).not.toHaveBeenCalled();
   });
 
   it("rolls back a new join when history loading fails", async () => {
@@ -163,12 +185,33 @@ describe("ChatGateway", () => {
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
     roomPresenceService.hasSocket.mockReturnValue(false);
     roomPresenceService.join.mockReturnValue({ becameActive: true });
+    userChatroomsRepository.beginMembership.mockResolvedValue(true);
     chatsRepository.listLatestMessages.mockRejectedValue(new Error("history unavailable"));
 
     await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({
       ok: false, error: { code: "JOIN_FAILED" }
     });
     expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
+    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
+  });
+
+  it("does not revoke an existing membership when reopening history fails", async () => {
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    roomPresenceService.join.mockReturnValue({ becameActive: true });
+    userChatroomsRepository.beginMembership.mockResolvedValue(false);
+    chatsRepository.listLatestMessages.mockRejectedValue(new Error("history unavailable"));
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "JOIN_FAILED" }
+    });
+
+    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
     expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
     expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
   });
@@ -184,11 +227,14 @@ describe("ChatGateway", () => {
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
     roomPresenceService.hasSocket.mockReturnValueOnce(false).mockReturnValueOnce(true);
     roomPresenceService.join.mockReturnValue({ becameActive: true, numberOfUsers: 1 });
+    userChatroomsRepository.beginMembership.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    userChatroomsRepository.countActiveMembers.mockResolvedValue(1);
 
     await gateway.joinRoom(firstSocket, { chatroomId });
     await gateway.joinRoom(secondSocket, { chatroomId });
 
-    expect(userChatroomsRepository.beginMembership).toHaveBeenCalledTimes(1);
+    expect(userChatroomsRepository.beginMembership).toHaveBeenCalledTimes(2);
+    expect(userChatroomsRepository.countActiveMembers).toHaveBeenCalledTimes(1);
     expect(server.emit).toHaveBeenCalledTimes(1);
     expect(secondSocket.to).not.toHaveBeenCalled();
   });

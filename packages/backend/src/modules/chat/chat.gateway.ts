@@ -60,24 +60,28 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
       if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
         return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
       }
+      membershipOpened = await this.userChatroomsRepository.beginMembership(user.id, chatroomId);
       if (this.roomPresenceService.hasSocket(chatroomId, user.id, socket.id)) {
         const messages = await this.chatsRepository.listLatestMessages(chatroomId);
+        if (membershipOpened) {
+          const numberOfUsers = await this.userChatroomsRepository.countActiveMembers(chatroomId);
+          this.emitPresenceEvent(
+            socket, chatroomId, user, "user_joined", `${user.email} joined the room`, numberOfUsers
+          );
+        }
         return { ok: true, data: { chatroomId, messages } };
       }
 
       await socket.join(getChatroomSocketRoom(chatroomId));
       socketJoined = true;
-      const presence = this.roomPresenceService.join(chatroomId, user.id, socket.id);
+      this.roomPresenceService.join(chatroomId, user.id, socket.id);
       presenceJoined = true;
-      if (presence.becameActive) {
-        await this.userChatroomsRepository.beginMembership(user.id, chatroomId);
-        membershipOpened = true;
-      }
 
       const messages = await this.chatsRepository.listLatestMessages(chatroomId);
-      if (presence.becameActive) {
+      if (membershipOpened) {
+        const numberOfUsers = await this.userChatroomsRepository.countActiveMembers(chatroomId);
         this.emitPresenceEvent(
-          socket, chatroomId, user, "user_joined", `${user.email} joined the room`, presence.numberOfUsers
+          socket, chatroomId, user, "user_joined", `${user.email} joined the room`, numberOfUsers
         );
       }
       return { ok: true, data: { chatroomId, messages } };
