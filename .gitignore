@@ -8,6 +8,7 @@ packages/frontend/test-results/
 .env
 .env.*
 !.env.example
+.sonar-project.properties
 .DS_Store
 .idea/
 .vscode/
