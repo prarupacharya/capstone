@@ -23,6 +23,11 @@ describe("AppLogger", () => {
     logger.warn("warn", "ctx");
     logger.debug("debug", "ctx");
     logger.verbose("verbose", "ctx");
+    logger.log("plain");
+    logger.error("plain");
+    logger.warn("plain");
+    logger.debug("plain");
+    logger.verbose("plain");
 
     expect(output.mock.calls[0][0]).toMatch(/\[INFO\] - message \{"requestId":"abc"\}$/);
     expect(output).toHaveBeenCalledWith(expect.stringContaining("[ERROR] - error"));
@@ -40,5 +45,9 @@ describe("AppLogger", () => {
     expect(output).toHaveBeenCalledWith(expect.stringContaining('"method":"UNKNOWN"'));
     expect(output).toHaveBeenCalledWith(expect.stringContaining('"error":"disk offline"'));
     expect(output).toHaveBeenCalledTimes(3);
+
+    append.mockImplementationOnce(() => { throw "write failed"; });
+    logger.writeToFile("PUT", "INFO", "failed");
+    expect(output).toHaveBeenCalledWith(expect.stringContaining('"error":"write failed"'));
   });
 });
