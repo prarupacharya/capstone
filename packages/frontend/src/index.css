@@ -173,6 +173,11 @@ main {
 .room-button__count { color: #64748b; }
 .chat-panel { display: flex; flex-direction: column; }
 .message-region { flex: 1; padding: 1rem; color: #64748b; background: #f8fafc; }
+.room-notification-list { display: grid; gap: 0.5rem; margin: 0 0 1rem; padding: 0; list-style: none; }
+.room-notification { padding: 0.65rem 0.8rem; border-left: 3px solid #818cf8; color: #475569; background: #eef2ff; }
+.room-notification strong { display: block; color: #3730a3; }
+.room-notification p { margin: 0.2rem 0; }
+.room-notification time { font-size: 0.8rem; }
 .message-composer { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .message-composer input { flex: 1; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font: inherit; }
 .message-composer button { padding: 0.7rem 1rem; border: 0; border-radius: 0.5rem; color: #fff; background: #4f46e5; font: inherit; }

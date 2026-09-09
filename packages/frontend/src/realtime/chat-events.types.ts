@@ -19,6 +19,15 @@ export interface LeaveRoomData {
   chatroomId: string;
 }
 
+export interface RoomNotification {
+  chatroomId: string;
+  type: "user_joined" | "user_left";
+  userId: string;
+  identity: string;
+  message: string;
+  createdAt: string;
+}
+
 export type JoinRoomAck = ChatEventAck<JoinRoomData>;
 export type LeaveRoomAck = ChatEventAck<LeaveRoomData>;
 export type SendMessageAck = ChatEventAck<ChatHistoryMessage>;
