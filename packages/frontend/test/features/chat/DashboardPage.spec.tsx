@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -72,6 +72,45 @@ test("ignores a late history acknowledgement from a former selection", async () 
   await act(async () => newAck({ ok: true, data: { chatroomId: "room-2", messages: [{ id: "new", chatroomId: "room-2", sender: "Lin", message: "Current room", createdAt: "2026-01-02T12:00:00.000Z" }] } }));
   expect(screen.queryByText("Old room")).toBeNull();
   expect(screen.getByText("Current room")).not.toBeNull();
+});
+
+test("trims valid messages, blocks duplicates, and clears after success", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  const input = screen.getByRole("textbox", { name: "Message" });
+  expect(input.getAttribute("maxlength")).toBe("2000");
+  fireEvent.change(input, { target: { value: "  hello  " } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("sendMessage", { chatroomId: "room-1", message: "hello" }, expect.any(Function)));
+  fireEvent.submit(input.closest("form") as HTMLFormElement);
+  expect(fixture.emit.mock.calls.filter(([event]) => event === "sendMessage")).toHaveLength(1);
+  const ack = fixture.emit.mock.calls[1][2] as (response: SendMessageAck) => void;
+  await act(async () => ack({ ok: true, data: { id: "message-1", chatroomId: "room-1", sender: "Ada", message: "hello", createdAt: "2026-01-01T12:00:00.000Z" } }));
+  expect((input as HTMLInputElement).value).toBe("");
+});
+
+test("blocks whitespace and retains rejected message text", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  const input = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(input, { target: { value: "   " } });
+  expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
+  fireEvent.change(input, { target: { value: "rejected" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(fixture.emit.mock.calls.filter(([event]) => event === "sendMessage")).toHaveLength(1));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (response: SendMessageAck) => void)({ ok: false, error: { code: "MESSAGE_FAILED", message: "Message rejected" } }));
+  expect(screen.getByRole("alert").textContent).toBe("Message rejected");
+  expect((input as HTMLInputElement).value).toBe("rejected");
 });
 
 test("shows empty and error room states without exposing error details", async () => {
