@@ -26,10 +26,13 @@ test("sends the tab session token to protected requests exactly once", async ({ 
       body: JSON.stringify({ id: "user-123", email: "user@example.com", userType: "generaluser" })
     });
   });
+  await page.route("**/chatrooms", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
 
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to LF-Chat" })).toBeVisible();
   await expect.poll(() => authorization).toBe(`Bearer ${accessToken}`);
   expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual(["capstone.accessToken"]);
 });
@@ -54,6 +57,9 @@ test("keeps public login requests free of session authorization", async ({ page 
   await page.route("**/auth/me", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
+  await page.route("**/chatrooms", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
 
   await page.goto("/");
   await page.getByRole("button", { name: "Log out" }).click();
@@ -62,7 +68,7 @@ test("keeps public login requests free of session authorization", async ({ page 
   await page.getByLabel("Password").fill("correct-password");
   await page.getByRole("form", { name: "Log in" }).getByRole("button", { name: "Log in" }).click();
 
-  await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to LF-Chat" })).toBeVisible();
   expect(requestSeen).toBe(true);
   expect(authorization).toBeUndefined();
 });

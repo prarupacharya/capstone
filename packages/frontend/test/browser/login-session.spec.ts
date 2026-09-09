@@ -24,6 +24,16 @@ test("logs in, persists only the token in the tab, and logs out", async ({ page 
       body: JSON.stringify({ accessToken })
     });
   });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "user-123", email: "user@example.com", userType: "generaluser" })
+    });
+  });
+  await page.route("**/chatrooms", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
 
   await page.goto("/");
   await page.getByRole("button", { name: "Log in", exact: true }).first().click();
@@ -31,12 +41,12 @@ test("logs in, persists only the token in the tab, and logs out", async ({ page 
   await page.getByLabel("Password").fill("correct-password");
   await page.getByRole("form", { name: "Log in" }).getByRole("button", { name: "Log in" }).click();
 
-  await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to LF-Chat" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage))).toEqual(["capstone.accessToken"]);
   expect(await page.evaluate(() => sessionStorage.getItem("capstone.accessToken"))).toBe(accessToken);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to LF-Chat" })).toBeVisible();
 
   await page.evaluate(() => localStorage.setItem("capstone.accessToken", "legacy-token"));
   await page.getByRole("button", { name: "Log out" }).click();
