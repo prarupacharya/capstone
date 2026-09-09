@@ -9,6 +9,11 @@ export interface JoinRoomData {
   messages: ChatMessage[];
 }
 
+export interface SendMessagePayload {
+  chatroomId: string;
+  message: string;
+}
+
 export interface RoomNotification {
   chatroomId: string;
   type: "user_joined" | "user_left";
