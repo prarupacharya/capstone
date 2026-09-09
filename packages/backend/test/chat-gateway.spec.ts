@@ -184,4 +184,71 @@ describe("ChatGateway", () => {
     expect(server.emit).toHaveBeenCalledTimes(1);
     expect(secondSocket.to).not.toHaveBeenCalled();
   });
+
+  it("rejects malformed, nonexistent, and nonmember leaves", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+
+    await expect(gateway.leaveRoom(socket, { chatroomId: "not-a-uuid" })).resolves.toMatchObject({
+      ok: false, error: { code: "INVALID_PAYLOAD" }
+    });
+    chatroomsRepository.findChatroomById.mockResolvedValue(null);
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "ROOM_NOT_FOUND" }
+    });
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "NOT_MEMBER" }
+    });
+  });
+
+  it("leaves the final socket and announces the updated presence", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(true);
+    roomPresenceService.leave.mockReturnValue({ becameInactive: true, numberOfUsers: 0 });
+
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toEqual({
+      ok: true, data: { chatroomId }
+    });
+    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
+    expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect((socket.to as jest.Mock).mock.results[0].value.emit).toHaveBeenCalledWith(
+      "roomNotification",
+      expect.objectContaining({
+        chatroomId,
+        type: "user_left",
+        userId: "user-123",
+        identity: "user@example.com",
+        message: "user@example.com left the room",
+        createdAt: expect.any(String)
+      })
+    );
+    expect(server.emit).toHaveBeenCalledWith(
+      "roomUserCountUpdated", { chatroomId, numberOfUsers: 0 }
+    );
+  });
+
+  it("only removes one socket when another tab remains active", async () => {
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(true);
+    roomPresenceService.leave.mockReturnValue({ becameInactive: false, numberOfUsers: 1 });
+
+    await expect(gateway.leaveRoom(socket, { chatroomId })).resolves.toMatchObject({ ok: true });
+
+    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
+    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
+    expect(socket.to).not.toHaveBeenCalled();
+    expect(server.emit).not.toHaveBeenCalled();
+  });
 });
