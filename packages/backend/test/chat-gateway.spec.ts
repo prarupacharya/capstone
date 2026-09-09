@@ -1,6 +1,7 @@
 import type { Server, Socket } from "socket.io";
 import { ChatGateway } from "../src/modules/chat/chat.gateway";
 import type { ChatroomsRepository } from "../src/modules/chat/chatrooms.repository";
+import type { ChatsRepository } from "../src/modules/chat/chats.repository";
 import type { RoomPresenceService } from "../src/modules/chat/room-presence.service";
 import type { UserChatroomsRepository } from "../src/modules/chat/user-chatrooms.repository";
 import { WsJwtAuthService } from "../src/modules/chat/ws-jwt-auth.service";
@@ -20,15 +21,17 @@ function createSocket(token?: unknown) {
 function createGateway() {
   const authService = { authenticate: jest.fn() };
   const chatroomsRepository = { findChatroomById: jest.fn() };
+  const chatsRepository = { listLatestMessages: jest.fn().mockResolvedValue([]) };
   const roomPresenceService = {
     hasSocket: jest.fn(),
     join: jest.fn(),
     leave: jest.fn()
   };
-  const userChatroomsRepository = { beginMembership: jest.fn() };
+  const userChatroomsRepository = { beginMembership: jest.fn(), endMembership: jest.fn() };
   const gateway = new ChatGateway(
     authService as unknown as WsJwtAuthService,
     chatroomsRepository as unknown as ChatroomsRepository,
+    chatsRepository as unknown as ChatsRepository,
     roomPresenceService as unknown as RoomPresenceService,
     userChatroomsRepository as unknown as UserChatroomsRepository
   );
@@ -40,7 +43,7 @@ function createGateway() {
     next: (error?: Error) => void
   ) => void;
 
-  return { authService, chatroomsRepository, roomPresenceService, userChatroomsRepository, gateway, middleware, server };
+  return { authService, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository, gateway, middleware, server };
 }
 
 const waitForAuthentication = () =>
@@ -79,16 +82,18 @@ describe("ChatGateway", () => {
   });
 
   it("joins an existing room and records first-user membership", async () => {
-    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
     chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    const messages = [{ id: "message-1", chatroomId, sender: "alice", message: "Hello", createdAt: new Date() }];
+    chatsRepository.listLatestMessages.mockResolvedValue(messages);
     roomPresenceService.hasSocket.mockReturnValue(false);
     roomPresenceService.join.mockReturnValue({ becameActive: true });
 
     await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toEqual({
-      ok: true, data: { chatroomId }
+      ok: true, data: { chatroomId, messages }
     });
     expect(socket.join).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
     expect(userChatroomsRepository.beginMembership).toHaveBeenCalledWith("user-123", chatroomId);
@@ -124,5 +129,23 @@ describe("ChatGateway", () => {
       ok: false, error: { code: "JOIN_FAILED" }
     });
     expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
+  });
+
+  it("rolls back a new join when history loading fails", async () => {
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository } = createGateway();
+    const socket = createSocket("valid-token");
+    socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
+    const chatroomId = "11111111-1111-4111-8111-111111111111";
+    chatroomsRepository.findChatroomById.mockResolvedValue({ id: chatroomId });
+    roomPresenceService.hasSocket.mockReturnValue(false);
+    roomPresenceService.join.mockReturnValue({ becameActive: true });
+    chatsRepository.listLatestMessages.mockRejectedValue(new Error("history unavailable"));
+
+    await expect(gateway.joinRoom(socket, { chatroomId })).resolves.toMatchObject({
+      ok: false, error: { code: "JOIN_FAILED" }
+    });
+    expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect(roomPresenceService.leave).toHaveBeenCalledWith(chatroomId, "user-123", "socket-1");
+    expect(socket.leave).toHaveBeenCalledWith(`chatroom:${chatroomId}`);
   });
 });
