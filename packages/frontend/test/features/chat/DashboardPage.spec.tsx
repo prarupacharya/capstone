@@ -2,7 +2,7 @@ import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 afterEach(cleanup);
@@ -146,6 +146,64 @@ test("stops rendering messages from a room after switching away", async () => {
   await act(async () => fixture.trigger("newMessage", currentRoomMessage));
   expect(screen.queryByText("Old live")).toBeNull();
   expect(screen.getByText("Current live")).not.toBeNull();
+});
+
+test("renders room join and leave notifications as transient activity", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
+  const joined: RoomNotification = {
+    chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin", message: "Lin joined the room", createdAt: "2026-01-01T12:01:00.000Z"
+  };
+  const left: RoomNotification = {
+    chatroomId: "room-1", type: "user_left", userId: "user-3", identity: "Ada", message: "Ada left the room", createdAt: "2026-01-01T12:02:00.000Z"
+  };
+  const otherRoom: RoomNotification = { ...joined, chatroomId: "room-2", message: "Lin joined elsewhere" };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  await act(async () => fixture.trigger("roomNotification", joined));
+  await act(async () => fixture.trigger("roomNotification", left));
+  await act(async () => fixture.trigger("roomNotification", otherRoom));
+
+  const activity = within(screen.getByLabelText("Room activity"));
+  expect(activity.getByText("Lin joined the room")).not.toBeNull();
+  expect(activity.getByText("Ada left the room")).not.toBeNull();
+  expect(activity.queryByText("Lin joined elsewhere")).toBeNull();
+  expect(activity.getAllByRole("status")).toHaveLength(2);
+  expect(activity.getAllByRole("time")[0].getAttribute("datetime")).toBe(joined.createdAt);
+  expect(screen.queryByText("No messages yet.")).not.toBeNull();
+});
+
+test("clears notifications when switching rooms and ignores later old-room events", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
+  ];
+  const oldNotification: RoomNotification = {
+    chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin", message: "Lin joined General", createdAt: "2026-01-01T12:01:00.000Z"
+  };
+  const currentNotification: RoomNotification = {
+    ...oldNotification, chatroomId: "room-2", message: "Lin joined Support"
+  };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  await act(async () => fixture.trigger("roomNotification", oldNotification));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+  await act(async () => fixture.trigger("roomNotification", oldNotification));
+  await act(async () => fixture.trigger("roomNotification", currentNotification));
+
+  expect(screen.queryByText("Lin joined General")).toBeNull();
+  expect(screen.getByText("Lin joined Support")).not.toBeNull();
 });
 
 test("blocks whitespace and retains rejected message text", async () => {
