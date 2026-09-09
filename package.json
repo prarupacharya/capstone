@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d postgres",
     "dev": "node scripts/dev.mjs",
     "lint": "eslint . --max-warnings=0 && node scripts/run-workspaces.mjs lint",
+    "sonar": "node scripts/sonar.mjs",
     "typecheck": "tsc --noEmit --project tsconfig.base.json && node scripts/run-workspaces.mjs typecheck",
     "test": "node --test test/repository.test.mjs test/cd-config.test.mjs && node scripts/run-workspaces.mjs test"
   },

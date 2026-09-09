@@ -1,0 +1,11 @@
+# Copy this file to .sonar-project.properties and replace the token.
+# .sonar-project.properties is ignored by Git because it contains secrets.
+sonar.projectKey=capstone
+sonar.host.url=http://localhost:9000
+sonar.token=REPLACE_WITH_YOUR_SONAR_TOKEN
+
+sonar.sources=packages/backend/src,packages/frontend/src
+sonar.tests=test,packages/backend/test,packages/frontend/test
+sonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**
+sonar.test.inclusions=**/*.test.*,**/*.spec.*
+sonar.sourceEncoding=UTF-8
