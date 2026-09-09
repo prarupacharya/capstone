@@ -1,6 +1,7 @@
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway
@@ -21,7 +22,7 @@ import { UserChatroomsRepository } from "./user-chatrooms.repository";
 import { WsJwtAuthService } from "./ws-jwt-auth.service";
 
 @WebSocketGateway({ cors: { origin: true } })
-export class ChatGateway implements OnGatewayInit {
+export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
   server!: Server;
 
   constructor(
@@ -120,6 +121,28 @@ export class ChatGateway implements OnGatewayInit {
     }
   }
 
+  async handleDisconnect(socket: Socket) {
+    const user = (socket.data as { user?: WsAuthenticatedUser }).user;
+    const changes = this.roomPresenceService.disconnect(socket.id);
+
+    for (const change of changes) {
+      if (change.becameInactive) {
+        try {
+          await this.userChatroomsRepository.endMembership(change.userId, change.roomId);
+        } catch {
+          // Live presence remains authoritative when history cleanup is unavailable.
+        }
+        if (user) {
+          this.emitPresenceEvent(
+            socket, change.roomId, user, "user_left", `${user.email} left the room`, change.numberOfUsers
+          );
+          continue;
+        }
+      }
+      this.emitUserCount(change.roomId, change.numberOfUsers);
+    }
+  }
+
   private async authenticateSocket(socket: Socket, next: (error?: Error) => void) {
     try {
       const user = await this.wsJwtAuthService.authenticate(socket.handshake.auth?.token);
@@ -161,6 +184,10 @@ export class ChatGateway implements OnGatewayInit {
     };
     const count: RoomUserCountUpdated = { chatroomId, numberOfUsers };
     socket.to(getChatroomSocketRoom(chatroomId)).emit("roomNotification", notification);
-    this.server.emit("roomUserCountUpdated", count);
+    this.emitUserCount(count.chatroomId, count.numberOfUsers);
+  }
+
+  private emitUserCount(chatroomId: string, numberOfUsers: number) {
+    this.server.emit("roomUserCountUpdated", { chatroomId, numberOfUsers });
   }
 }
