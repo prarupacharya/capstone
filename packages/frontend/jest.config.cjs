@@ -8,7 +8,8 @@ module.exports = {
     "^.+\\.[tj]sx?$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.test.json", useESM: true }]
   },
   moduleNameMapper: {
-    "^(\\.{1,2}/.*)\\.js$": "$1"
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+    "^.+\\.css$": "<rootDir>/test/style-mock.cjs"
   },
   testMatch: ["<rootDir>/test/**/*.spec.ts", "<rootDir>/test/**/*.spec.tsx"],
   testPathIgnorePatterns: ["<rootDir>/test/browser/"],
