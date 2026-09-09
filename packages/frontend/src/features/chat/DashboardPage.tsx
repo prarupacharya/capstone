@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -130,6 +130,18 @@ export function DashboardPage({
     socket.on("roomNotification", receiveNotification);
     return () => { socket.off("roomNotification", receiveNotification); };
   }, [activeRoomId, isConnected, socket]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    const receiveUserCount = (update: RoomUserCountUpdated) => {
+      if (!Number.isInteger(update.numberOfUsers) || update.numberOfUsers < 0) return;
+      setRooms((current) => current.map((room) => room.id === update.chatroomId
+        ? { ...room, numberOfUsers: update.numberOfUsers }
+        : room));
+    };
+    socket.on("roomUserCountUpdated", receiveUserCount);
+    return () => { socket.off("roomUserCountUpdated", receiveUserCount); };
+  }, [isConnected, socket]);
 
   useEffect(() => {
     let active = true;
