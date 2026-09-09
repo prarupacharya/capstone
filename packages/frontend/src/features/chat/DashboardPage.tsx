@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -29,6 +29,7 @@ export function DashboardPage({
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
+  const [notifications, setNotifications] = useState<RoomNotification[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
@@ -51,6 +52,7 @@ export function DashboardPage({
       setIsConnected(false);
       setActiveRoomId(undefined);
       setMessages([]);
+      setNotifications([]);
     };
     const failed = () => setConnectionStatus("unavailable");
     currentSocket.on("connect", connected);
@@ -75,6 +77,7 @@ export function DashboardPage({
     setSendError(undefined);
     setActiveRoomId(undefined);
     setMessages([]);
+    setNotifications([]);
 
     const join = () => {
       socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
@@ -116,6 +119,16 @@ export function DashboardPage({
     };
     socket.on("newMessage", receiveMessage);
     return () => { socket.off("newMessage", receiveMessage); };
+  }, [activeRoomId, isConnected, socket]);
+
+  useEffect(() => {
+    if (!socket || !isConnected || !activeRoomId) return;
+    const receiveNotification = (notification: RoomNotification) => {
+      if (notification.chatroomId !== activeRoomId) return;
+      setNotifications((current) => [...current, notification]);
+    };
+    socket.on("roomNotification", receiveNotification);
+    return () => { socket.off("roomNotification", receiveNotification); };
   }, [activeRoomId, isConnected, socket]);
 
   useEffect(() => {
@@ -172,6 +185,14 @@ export function DashboardPage({
           <h2 id="selected-room-heading">{selectedRoom?.id === activeRoomId ? selectedRoom?.chatroomName : "Select a chatroom"}</h2>
           {roomError && <p role="alert">{roomError}</p>}
           <div className="message-region" aria-label="Messages" aria-live="polite">
+            {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
+              {notifications.map((notification, index) => <li
+                className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`} role="status"
+              >
+                <strong>{notification.identity}</strong><p>{notification.message}</p>
+                <time dateTime={notification.createdAt}>{formatMessageTime(notification.createdAt)}</time>
+              </li>)}
+            </ul>}
             {messages.length === 0 ? <p>No messages yet.</p> : <ol className="message-list">
               {messages.map((message) => <li key={message.id}>
                 <strong>{message.sender}</strong><p>{message.message}</p>
