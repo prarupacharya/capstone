@@ -5,6 +5,7 @@ import { ChatGateway } from "./chat.gateway";
 import { ChatroomsController } from "./chatrooms.controller";
 import { ChatroomsRepository } from "./chatrooms.repository";
 import { ChatroomsService } from "./chatrooms.service";
+import { ChatsRepository } from "./chats.repository";
 import { RoomPresenceService } from "./room-presence.service";
 import { UserChatroomsRepository } from "./user-chatrooms.repository";
 import { WsJwtAuthService } from "./ws-jwt-auth.service";
@@ -14,6 +15,7 @@ import { WsJwtAuthService } from "./ws-jwt-auth.service";
   controllers: [ChatroomsController],
   providers: [
     ChatGateway,
+    ChatsRepository,
     ChatroomsRepository,
     ChatroomsService,
     RoomPresenceService,
@@ -21,6 +23,7 @@ import { WsJwtAuthService } from "./ws-jwt-auth.service";
     WsJwtAuthService
   ],
   exports: [
+    ChatsRepository,
     ChatroomsRepository,
     ChatroomsService,
     RoomPresenceService,
