@@ -5,7 +5,10 @@ module.exports = {
     "^.+\\.tsx?$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.json" }]
   },
   testEnvironment: "node",
-  testMatch: ["<rootDir>/test/**/*.spec.ts"],
+  testMatch: [
+    "<rootDir>/test/**/*.spec.ts",
+    "<rootDir>/test/**/*.e2e-spec.ts"
+  ],
   clearMocks: true,
   collectCoverageFrom: ["<rootDir>/src/**/*.ts"],
   coverageDirectory: "coverage",
