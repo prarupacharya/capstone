@@ -108,18 +108,22 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
       if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
         return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
       }
-      if (!this.roomPresenceService.hasSocket(chatroomId, user.id, socket.id)) {
-        return this.failure("NOT_MEMBER", "Socket is not a room member");
+      const membershipEnded = await this.userChatroomsRepository.endMembership(user.id, chatroomId);
+      if (!membershipEnded) {
+        return this.failure("NOT_MEMBER", "User is not a room member");
       }
 
+      const detachedSocketIds = this.roomPresenceService.detachUserFromRoom(chatroomId, user.id);
       await socket.leave(getChatroomSocketRoom(chatroomId));
-      const presence = this.roomPresenceService.leave(chatroomId, user.id, socket.id);
-      if (presence.becameInactive) {
-        await this.userChatroomsRepository.endMembership(user.id, chatroomId);
-        this.emitPresenceEvent(
-          socket, chatroomId, user, "user_left", `${user.email} left the room`, presence.numberOfUsers
-        );
+      for (const socketId of detachedSocketIds) {
+        if (socketId !== socket.id) {
+          this.server.in(socketId).socketsLeave(getChatroomSocketRoom(chatroomId));
+        }
       }
+      const numberOfUsers = await this.userChatroomsRepository.countActiveMembers(chatroomId);
+      this.emitPresenceEvent(
+        socket, chatroomId, user, "user_left", `${user.email} left the room`, numberOfUsers
+      );
 
       return { ok: true, data: { chatroomId } };
     } catch {
