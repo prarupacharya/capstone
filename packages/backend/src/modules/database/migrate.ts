@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { getDatabasePoolConfig, parseDatabaseConfig } from "./database.config";
 import { runUsersMigration } from "./migrations/001-create-users";
+import { runChatSchemaMigration } from "./migrations/002-create-chat-schema";
 
 export async function migrate() {
   const config = parseDatabaseConfig();
@@ -9,6 +10,7 @@ export async function migrate() {
   const pool = new Pool(getDatabasePoolConfig(config));
   try {
     await runUsersMigration(pool);
+    await runChatSchemaMigration(pool);
   } finally {
     await pool.end();
   }
