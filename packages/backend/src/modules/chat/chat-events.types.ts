@@ -9,6 +9,20 @@ export interface JoinRoomData {
   messages: ChatMessage[];
 }
 
+export interface RoomNotification {
+  chatroomId: string;
+  type: "user_joined";
+  userId: string;
+  identity: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface RoomUserCountUpdated {
+  chatroomId: string;
+  numberOfUsers: number;
+}
+
 export function getChatroomSocketRoom(chatroomId: string) {
   return `chatroom:${chatroomId}`;
 }

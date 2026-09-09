@@ -8,7 +8,12 @@ import {
 import type { Server, Socket } from "socket.io";
 import { ChatroomsRepository } from "./chatrooms.repository";
 import type { WsAuthenticatedUser } from "./ws-jwt-auth.service";
-import type { ChatEventAck, JoinRoomData } from "./chat-events.types";
+import type {
+  ChatEventAck,
+  JoinRoomData,
+  RoomNotification,
+  RoomUserCountUpdated
+} from "./chat-events.types";
 import { getChatroomSocketRoom } from "./chat-events.types";
 import { ChatsRepository } from "./chats.repository";
 import { RoomPresenceService } from "./room-presence.service";
@@ -67,6 +72,7 @@ export class ChatGateway implements OnGatewayInit {
       }
 
       const messages = await this.chatsRepository.listLatestMessages(chatroomId);
+      if (presence.becameActive) this.emitJoinEvents(socket, chatroomId, user, presence.numberOfUsers);
       return { ok: true, data: { chatroomId, messages } };
     } catch {
       if (membershipOpened) await this.userChatroomsRepository.endMembership(user.id, chatroomId);
@@ -97,5 +103,19 @@ export class ChatGateway implements OnGatewayInit {
 
   private failure(code: string, message: string): ChatEventAck<never> {
     return { ok: false, error: { code, message } };
+  }
+
+  private emitJoinEvents(socket: Socket, chatroomId: string, user: WsAuthenticatedUser, numberOfUsers: number) {
+    const notification: RoomNotification = {
+      chatroomId,
+      type: "user_joined",
+      userId: user.id,
+      identity: user.email,
+      message: `${user.email} joined the room`,
+      createdAt: new Date().toISOString()
+    };
+    const count: RoomUserCountUpdated = { chatroomId, numberOfUsers };
+    socket.to(getChatroomSocketRoom(chatroomId)).emit("roomNotification", notification);
+    this.server.emit("roomUserCountUpdated", count);
   }
 }
