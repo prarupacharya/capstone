@@ -10,7 +10,7 @@ jest.unstable_mockModule(fileURLToPath(new URL("../../src/api/client.ts", import
   request: requestMock
 }));
 
-const { loginUser, registerUser } = await import("../../src/api/auth.js");
+const { getCurrentUser, loginUser, registerUser } = await import("../../src/api/auth.js");
 
 const credentials: RegistrationInput = {
   email: "user@example.com",
@@ -75,5 +75,14 @@ describe("authentication API adapters", () => {
 
     expect(requestMock.mock.calls[0]).toHaveLength(2);
     expect(requestMock.mock.calls[0][2]).toBeUndefined();
+  });
+
+  test("loads the current user with an authenticated request", async () => {
+    requestMock.mockResolvedValue(responseWith({ id: "user-123", email: credentials.email, userType: "generaluser" }));
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: "user-123", email: credentials.email, userType: "generaluser"
+    });
+    expect(requestMock).toHaveBeenCalledWith("/auth/me", undefined, { authenticated: true });
   });
 });

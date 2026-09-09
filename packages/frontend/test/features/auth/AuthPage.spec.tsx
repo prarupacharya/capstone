@@ -45,7 +45,7 @@ describe("AuthPage", () => {
     const fetchMock = installFetch(async (input) => {
       const url = String(input);
       if (url.endsWith("/auth/login")) return jsonResponse({ accessToken });
-      if (url.endsWith("/auth/me")) return jsonResponse({ id: "user-123" });
+      if (url.endsWith("/auth/me")) return jsonResponse({ id: "user-123", email: "user@example.com", userType: "generaluser" });
       return jsonResponse({}, 404);
     });
     render(<AuthPage />);
@@ -55,7 +55,8 @@ describe("AuthPage", () => {
     fireEvent.change(loginForm.getByLabelText("Password"), { target: { value: "correct-password" } });
     fireEvent.click(loginForm.getByRole("button", { name: "Log in" }));
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "You're signed in" })).not.toBeNull());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Welcome to LF-Chat" })).not.toBeNull());
+    expect(screen.getByRole("heading", { name: "user@example.com" })).not.toBeNull();
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBe(accessToken);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(String(fetchMock.mock.calls[1][0])).toBe("http://localhost:3000/auth/me");
@@ -71,17 +72,20 @@ describe("AuthPage", () => {
   test("restores an existing token and probes the protected session", async () => {
     const accessToken = "existing.header.signature";
     window.sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    const fetchMock = installFetch(async () => jsonResponse({ id: "user-123" }));
+    const fetchMock = installFetch(async () => jsonResponse({
+      id: "user-123", email: "user@example.com", userType: "generaluser"
+    }));
 
     render(<AuthPage />);
 
-    expect(screen.getByRole("heading", { name: "You're signed in" })).not.toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Welcome to LF-Chat" })).not.toBeNull());
+    expect(screen.getByRole("heading", { name: "user@example.com" })).not.toBeNull();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
     expect(headers.get("authorization")).toBe(`Bearer ${accessToken}`);
   });
 
-  test("keeps the authenticated shell when the session probe fails", async () => {
+  test("clears an invalid restored session and returns to login", async () => {
     window.sessionStorage.setItem(ACCESS_TOKEN_KEY, "existing.header.signature");
     const fetchMock = installFetch(async () => {
       throw new Error("session probe offline");
@@ -90,7 +94,7 @@ describe("AuthPage", () => {
     render(<AuthPage />);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("heading", { name: "You're signed in" })).not.toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Log in" })).not.toBeNull());
+    expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
   });
 });
