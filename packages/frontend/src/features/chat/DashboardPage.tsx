@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 
 type DashboardPageProps = {
@@ -29,6 +29,9 @@ export function DashboardPage({
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>();
   const joinedRoomId = useRef<string>();
 
   useEffect(() => {
@@ -69,6 +72,7 @@ export function DashboardPage({
     let active = true;
     const previousRoomId = joinedRoomId.current;
     setRoomError(undefined);
+    setSendError(undefined);
     setActiveRoomId(undefined);
     setMessages([]);
 
@@ -117,6 +121,18 @@ export function DashboardPage({
   }, [loadChatrooms]);
 
   const selectedRoom = rooms.find((room) => room.id === selectedId);
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const message = draft.trim();
+    if (!socket || !isConnected || !activeRoomId || !message || sending) return;
+    setSending(true);
+    setSendError(undefined);
+    socket.emit("sendMessage", { chatroomId: activeRoomId, message }, (ack: SendMessageAck) => {
+      setSending(false);
+      if (ack.ok) setDraft("");
+      else setSendError(ack.error.message);
+    });
+  };
 
   return (
     <main className="dashboard-shell">
@@ -151,9 +167,13 @@ export function DashboardPage({
               </li>)}
             </ol>}
           </div>
-          <form className="message-composer" onSubmit={(event) => event.preventDefault()}>
-            <input aria-label="Message" placeholder="Type a message" disabled />
-            <button type="submit" disabled>Send</button>
+          {sendError && <p role="alert">{sendError}</p>}
+          <form className="message-composer" onSubmit={handleSubmit}>
+            <input
+              aria-label="Message" placeholder="Type a message" maxLength={2000}
+              value={draft} onChange={(event) => setDraft(event.target.value)}
+            />
+            <button type="submit" disabled={!activeRoomId || !draft.trim() || sending}>{sending ? "Sending..." : "Send"}</button>
           </form>
         </section>
       </div>

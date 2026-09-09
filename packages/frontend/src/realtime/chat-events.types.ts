@@ -21,3 +21,4 @@ export interface LeaveRoomData {
 
 export type JoinRoomAck = ChatEventAck<JoinRoomData>;
 export type LeaveRoomAck = ChatEventAck<LeaveRoomData>;
+export type SendMessageAck = ChatEventAck<ChatHistoryMessage>;
