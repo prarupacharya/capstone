@@ -1,5 +1,5 @@
 import { afterEach, expect, jest, test } from "@jest/globals";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
 import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
@@ -11,13 +11,18 @@ const user = { id: "user-123", email: "user@example.com", userType: "generaluser
 
 function socketFixture() {
   let socket: Socket;
-  const listeners = new Map<string, () => void>();
-  const on = jest.fn((event: string, listener: () => void) => { listeners.set(event, listener); return socket; });
+  type SocketListener = (...args: unknown[]) => void;
+  const listeners = new Map<string, SocketListener>();
+  const on = jest.fn((event: string, listener: SocketListener) => { listeners.set(event, listener); return socket; });
+  const off = jest.fn((event: string, listener: SocketListener) => {
+    if (listeners.get(event) === listener) listeners.delete(event);
+    return socket;
+  });
   const emit = jest.fn();
   socket = {
-    on, off: jest.fn(), connect: jest.fn(() => listeners.get("connect")?.()), disconnect: jest.fn(), emit
+    on, off, connect: jest.fn(() => listeners.get("connect")?.()), disconnect: jest.fn(), emit
   } as unknown as Socket;
-  return { socket, emit, trigger: (event: string) => listeners.get(event)?.() };
+  return { socket, emit, trigger: (event: string, ...args: unknown[]) => listeners.get(event)?.(...args) };
 }
 
 test("loads rooms, renders the chat frame, and selects a room", async () => {
@@ -92,6 +97,55 @@ test("trims valid messages, blocks duplicates, and clears after success", async 
   const ack = fixture.emit.mock.calls[1][2] as (response: SendMessageAck) => void;
   await act(async () => ack({ ok: true, data: { id: "message-1", chatroomId: "room-1", sender: "Ada", message: "hello", createdAt: "2026-01-01T12:00:00.000Z" } }));
   expect((input as HTMLInputElement).value).toBe("");
+});
+
+test("appends active-room messages once and ignores other rooms", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
+  const history: ChatHistoryMessage = { id: "message-1", chatroomId: "room-1", sender: "Ada", message: "History", createdAt: "2026-01-01T12:00:00.000Z" };
+  const live: ChatHistoryMessage = { id: "message-2", chatroomId: "room-1", sender: "Lin", message: "Live", createdAt: "2026-01-01T12:01:00.000Z" };
+  const unrelated: ChatHistoryMessage = { ...live, id: "message-3", chatroomId: "room-2", message: "Other room" };
+  const { unmount } = render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [history] } }));
+  await act(async () => fixture.trigger("newMessage", live));
+  await act(async () => fixture.trigger("newMessage", live));
+  await act(async () => fixture.trigger("newMessage", history));
+  await act(async () => fixture.trigger("newMessage", unrelated));
+
+  expect(within(screen.getByLabelText("Messages")).getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.getByText("History")).not.toBeNull();
+  expect(screen.getByText("Live")).not.toBeNull();
+  expect(screen.queryByText("Other room")).toBeNull();
+  unmount();
+  expect(fixture.socket.off).toHaveBeenCalledWith("newMessage", expect.any(Function));
+});
+
+test("stops rendering messages from a room after switching away", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 },
+    { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
+  ];
+  const oldRoomMessage: ChatHistoryMessage = { id: "old-live", chatroomId: "room-1", sender: "Ada", message: "Old live", createdAt: "2026-01-01T12:00:00.000Z" };
+  const currentRoomMessage: ChatHistoryMessage = { ...oldRoomMessage, id: "current-live", chatroomId: "room-2", message: "Current live" };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("leaveRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[1][2] as (ack: LeaveRoomAck) => void)({ ok: true, data: { chatroomId: "room-1" } }));
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-2" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[2][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-2", messages: [] } }));
+
+  await act(async () => fixture.trigger("newMessage", oldRoomMessage));
+  await act(async () => fixture.trigger("newMessage", currentRoomMessage));
+  expect(screen.queryByText("Old live")).toBeNull();
+  expect(screen.getByText("Current live")).not.toBeNull();
 });
 
 test("blocks whitespace and retains rejected message text", async () => {
