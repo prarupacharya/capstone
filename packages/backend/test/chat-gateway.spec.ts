@@ -306,7 +306,7 @@ describe("ChatGateway", () => {
     expect(server.emit).not.toHaveBeenCalled();
   });
 
-  it("closes the final membership and announces an unexpected disconnect", async () => {
+  it("cleans transient presence without ending membership on disconnect", async () => {
     const { gateway, roomPresenceService, userChatroomsRepository, server } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
@@ -318,16 +318,13 @@ describe("ChatGateway", () => {
 
     await gateway.handleDisconnect(socket);
 
-    expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
-    expect((socket.to as jest.Mock).mock.results[0].value.emit).toHaveBeenCalledWith(
-      "roomNotification", expect.objectContaining({ type: "user_left", chatroomId })
-    );
-    expect(server.emit).toHaveBeenCalledWith(
-      "roomUserCountUpdated", { chatroomId, numberOfUsers: 0 }
-    );
+    expect(roomPresenceService.disconnect).toHaveBeenCalledWith("socket-1");
+    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
+    expect(socket.to).not.toHaveBeenCalled();
+    expect(server.emit).not.toHaveBeenCalled();
   });
 
-  it("updates every room count without leaving on a multi-tab disconnect", async () => {
+  it("cleans every room without changing membership on a multi-room disconnect", async () => {
     const { gateway, roomPresenceService, userChatroomsRepository, server } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
@@ -338,11 +335,9 @@ describe("ChatGateway", () => {
 
     await gateway.handleDisconnect(socket);
 
-    expect(userChatroomsRepository.endMembership).toHaveBeenCalledTimes(1);
-    expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", "room-2");
-    expect(socket.to).toHaveBeenCalledTimes(1);
-    expect(server.emit).toHaveBeenNthCalledWith(1, "roomUserCountUpdated", { chatroomId: "room-1", numberOfUsers: 1 });
-    expect(server.emit).toHaveBeenNthCalledWith(2, "roomUserCountUpdated", { chatroomId: "room-2", numberOfUsers: 0 });
+    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
+    expect(socket.to).not.toHaveBeenCalled();
+    expect(server.emit).not.toHaveBeenCalled();
   });
 
   it("allows a clean membership interval after reconnecting", async () => {
@@ -361,7 +356,7 @@ describe("ChatGateway", () => {
     await gateway.handleDisconnect(socket);
     await gateway.joinRoom(socket, { chatroomId });
 
-    expect(userChatroomsRepository.endMembership).toHaveBeenCalledWith("user-123", chatroomId);
+    expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
     expect(userChatroomsRepository.beginMembership).toHaveBeenCalledWith("user-123", chatroomId);
   });
 

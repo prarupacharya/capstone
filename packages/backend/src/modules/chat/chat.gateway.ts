@@ -158,26 +158,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
   }
 
-  async handleDisconnect(socket: Socket) {
-    const user = (socket.data as { user?: WsAuthenticatedUser }).user;
-    const changes = this.roomPresenceService.disconnect(socket.id);
-
-    for (const change of changes) {
-      if (change.becameInactive) {
-        try {
-          await this.userChatroomsRepository.endMembership(change.userId, change.roomId);
-        } catch {
-          // Live presence remains authoritative when history cleanup is unavailable.
-        }
-        if (user) {
-          this.emitPresenceEvent(
-            socket, change.roomId, user, "user_left", `${user.email} left the room`, change.numberOfUsers
-          );
-          continue;
-        }
-      }
-      this.emitUserCount(change.roomId, change.numberOfUsers);
-    }
+  handleDisconnect(socket: Socket) {
+    this.roomPresenceService.disconnect(socket.id);
   }
 
   private async authenticateSocket(socket: Socket, next: (error?: Error) => void) {
