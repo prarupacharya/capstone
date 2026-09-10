@@ -7,6 +7,7 @@ import type { Socket } from "socket.io-client";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
+import { useChatSocket } from "./useChatSocket.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -25,9 +26,6 @@ export function DashboardPage({
   const [rooms, setRooms] = useState<ChatroomSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [connectionStatus, setConnectionStatus] = useState("connecting");
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
@@ -38,40 +36,15 @@ export function DashboardPage({
   const [sendError, setSendError] = useState<string>();
   const [pendingRoomId, setPendingRoomId] = useState<string>();
   const requestedJoinId = useRef<string>();
+  const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
 
   useEffect(() => {
-    const currentSocket = createSocket();
-    setSocket(currentSocket);
-    if (!currentSocket) {
-      setConnectionStatus("unavailable");
-      return;
-    }
-    const connected = () => {
-      setConnectionStatus("connected");
-      setIsConnected(true);
-    };
-    const disconnected = () => {
-      setConnectionStatus("disconnected");
-      setIsConnected(false);
-      setLeaving(false);
-      setActiveRoomId(undefined);
-      setMessages([]);
-      setNotifications([]);
-    };
-    const failed = () => setConnectionStatus("unavailable");
-    currentSocket.on("connect", connected);
-    currentSocket.on("disconnect", disconnected);
-    currentSocket.on("connect_error", failed);
-    currentSocket.connect();
-    return () => {
-      currentSocket.off("connect", connected);
-      currentSocket.off("disconnect", disconnected);
-      currentSocket.off("connect_error", failed);
-      currentSocket.disconnect();
-      setSocket(null);
-      setIsConnected(false);
-    };
-  }, [createSocket]);
+    if (connectionStatus !== "disconnected") return;
+    setLeaving(false);
+    setActiveRoomId(undefined);
+    setMessages([]);
+    setNotifications([]);
+  }, [connectionStatus]);
 
   useEffect(() => {
     if (!socket || !isConnected || !selectedId) return;
