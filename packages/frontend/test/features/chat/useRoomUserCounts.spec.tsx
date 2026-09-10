@@ -1,5 +1,5 @@
 import { afterEach, expect, jest, test } from "@jest/globals";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import type { Socket } from "socket.io-client";
 import type { RoomUserCountUpdated } from "../../../src/realtime/chat-events.types.js";
 import { useRoomUserCounts, type RoomUserCountUpdater } from "../../../src/features/chat/useRoomUserCounts.js";
