@@ -2,13 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
 import { useChatSocket } from "./useChatSocket.js";
 import { isRoomMember, useChatroomCatalog } from "./useChatroomCatalog.js";
+import { useActiveRoomFeed } from "./useActiveRoomFeed.js";
 import { useRoomUserCounts } from "./useRoomUserCounts.js";
 
 type DashboardPageProps = {
@@ -23,8 +24,6 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
-  const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
-  const [notifications, setNotifications] = useState<RoomNotification[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -36,13 +35,13 @@ export function DashboardPage({
   } = useChatroomCatalog(loadChatrooms);
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
   useRoomUserCounts(socket, isConnected, updateRoomUserCount);
+  const { messages, notifications, replaceMessages, clearFeed } = useActiveRoomFeed(socket, isConnected, activeRoomId);
 
   useEffect(() => {
     if (connectionStatus !== "disconnected") return;
     setLeaving(false);
     setActiveRoomId(undefined);
-    setMessages([]);
-    setNotifications([]);
+    clearFeed();
   }, [connectionStatus]);
 
   useEffect(() => {
@@ -52,8 +51,7 @@ export function DashboardPage({
     setRoomError(undefined);
     setSendError(undefined);
     setActiveRoomId(undefined);
-    setMessages([]);
-    setNotifications([]);
+    clearFeed();
 
     const join = () => {
       socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
@@ -67,7 +65,7 @@ export function DashboardPage({
         clearJoinRequest();
         markJoined(selectedId);
         setActiveRoomId(selectedId);
-        setMessages(ack.data.messages);
+        replaceMessages(ack.data.messages);
       });
     };
 
@@ -75,28 +73,6 @@ export function DashboardPage({
 
     return () => { active = false; };
   }, [isConnected, selectedId, socket]);
-
-  useEffect(() => {
-    if (!socket || !isConnected || !activeRoomId) return;
-    const receiveMessage = (message: ChatHistoryMessage) => {
-      if (message.chatroomId !== activeRoomId) return;
-      setMessages((current) => current.some((existing) => existing.id === message.id)
-        ? current
-        : [...current, message]);
-    };
-    socket.on("newMessage", receiveMessage);
-    return () => { socket.off("newMessage", receiveMessage); };
-  }, [activeRoomId, isConnected, socket]);
-
-  useEffect(() => {
-    if (!socket || !isConnected || !activeRoomId) return;
-    const receiveNotification = (notification: RoomNotification) => {
-      if (notification.chatroomId !== activeRoomId) return;
-      setNotifications((current) => [...current, notification]);
-    };
-    socket.on("roomNotification", receiveNotification);
-    return () => { socket.off("roomNotification", receiveNotification); };
-  }, [activeRoomId, isConnected, socket]);
 
   const leaveRoom = () => {
     const chatroomId = activeRoomId;
@@ -114,8 +90,7 @@ export function DashboardPage({
       markLeft(chatroomId);
       clearSelection();
       setActiveRoomId(undefined);
-      setMessages([]);
-      setNotifications([]);
+      clearFeed();
       setDraft("");
       setSendError(undefined);
     });
