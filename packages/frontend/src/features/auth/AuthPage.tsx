@@ -50,7 +50,7 @@ export function AuthPage() {
         <header className="auth-page__header">
           <h1>LF-Chat</h1>
         </header>
-        <output role="status">Checking your session...</output>
+        <output>Checking your session...</output>
       </main>
     );
   }

@@ -4,6 +4,7 @@ import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
 import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
+import { ChatroomSidebar } from "./ChatroomSidebar.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -175,8 +176,8 @@ export function DashboardPage({
   };
   const leaveRoom = () => {
     const chatroomId = activeRoomId;
-    if (!socket || !isConnected || !chatroomId || !selectedRoom ||
-      selectedRoom.id !== chatroomId || !isRoomMember(selectedRoom) || leaving) return;
+    if (!socket || !isConnected || !chatroomId || selectedRoom?.id !== chatroomId ||
+      !isRoomMember(selectedRoom) || leaving) return;
     setLeaving(true);
     setRoomError(undefined);
     socket.emit("leaveRoom", { chatroomId }, (ack: LeaveRoomAck) => {
@@ -213,23 +214,14 @@ export function DashboardPage({
       <header className="dashboard-header">
         <h1>Welcome to LF-Chat</h1>
         <h2 className="dashboard-header__user">{user.email}</h2>
-        <p className="connection-status" role="status">Chat: {connectionStatus}</p>
+        <output className="connection-status">Chat: {connectionStatus}</output>
         <button className="auth-secondary-button" type="button" onClick={onLogout}>Log out</button>
       </header>
       <div className="dashboard-layout">
-        <aside className="room-sidebar" aria-label="Chatrooms">
-          <h2>Chatrooms</h2>
-          {status === "loading" && <output role="status">Loading chatrooms...</output>}
-          {status === "error" && <p role="alert">Chatrooms could not be loaded. Please try again.</p>}
-          {status === "ready" && rooms.length === 0 && <p>No chatrooms available.</p>}
-          {status === "ready" && rooms.length > 0 && <ul className="room-list">
-            {rooms.map((room) => <li key={room.id}>
-              <button className="room-button" type="button" disabled={leaving} aria-pressed={room.id === activeRoomId} onClick={() => selectRoom(room)}>
-                <span>{room.chatroomName}</span><span className="room-button__meta"><span className="room-button__count">{room.numberOfUsers}</span><span className="room-button__status">{isRoomMember(room) ? "Joined" : "Not joined"}</span></span>
-              </button>
-            </li>)}
-          </ul>}
-        </aside>
+        <ChatroomSidebar
+          rooms={rooms} status={status} activeRoomId={activeRoomId} disabled={leaving}
+          isMember={isRoomMember} onSelect={selectRoom}
+        />
         <section className="chat-panel" aria-labelledby="selected-room-heading">
           <div className="chat-panel__header">
             <h2 id="selected-room-heading">{selectedRoom && selectedRoom.id === activeRoomId ? selectedRoom.chatroomName : "Select a chatroom"}</h2>
@@ -241,7 +233,7 @@ export function DashboardPage({
           <div className="message-region" aria-label="Messages" aria-live="polite">
             {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
               {notifications.map((notification, index) => <li
-                className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`} role="status"
+                className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`}
               >
                 <strong>{notification.identity}</strong><p>{notification.message}</p>
                 <time dateTime={notification.createdAt}>{formatMessageTime(notification.createdAt)}</time>
@@ -265,14 +257,14 @@ export function DashboardPage({
         </section>
       </div>
       {pendingRoom && <div className="join-dialog-backdrop">
-        <div className="join-dialog" role="dialog" aria-modal="true" aria-labelledby="join-room-heading" aria-describedby="join-room-description">
+        <dialog className="join-dialog" open aria-labelledby="join-room-heading" aria-describedby="join-room-description">
           <h2 id="join-room-heading">Join {pendingRoom.chatroomName}?</h2>
           <p id="join-room-description">Join this group chat to view and send messages.</p>
           <div className="join-dialog__actions">
             <button className="auth-secondary-button" type="button" onClick={() => setPendingRoomId(undefined)}>Cancel</button>
             <button type="button" onClick={confirmJoin}>Join chatroom</button>
           </div>
-        </div>
+        </dialog>
       </div>}
     </main>
   );
