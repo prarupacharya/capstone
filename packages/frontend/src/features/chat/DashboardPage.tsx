@@ -5,6 +5,7 @@ import { createChatSocket } from "../../realtime/chat-socket.js";
 import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
+import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
 
 type DashboardPageProps = {
@@ -228,13 +229,10 @@ export function DashboardPage({
           {roomError && <p role="alert">{roomError}</p>}
           <ChatMessageFeed messages={messages} notifications={notifications} />
           {sendError && <p role="alert">{sendError}</p>}
-          <form className="message-composer" onSubmit={handleSubmit}>
-            <input
-              aria-label="Message" placeholder="Type a message" maxLength={2000}
-              value={draft} onChange={(event) => setDraft(event.target.value)}
-            />
-            <button type="submit" disabled={!activeRoomId || !draft.trim() || sending}>{sending ? "Sending..." : "Send"}</button>
-          </form>
+          <MessageComposer
+            draft={draft} sending={sending} active={Boolean(activeRoomId)}
+            onDraftChange={setDraft} onSubmit={handleSubmit}
+          />
         </section>
       </div>
       {pendingRoom && <div className="join-dialog-backdrop">
