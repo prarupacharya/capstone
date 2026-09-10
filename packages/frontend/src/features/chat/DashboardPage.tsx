@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useRef } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
+import type { ChatHistoryMessage } from "../../realtime/chat-events.types.js";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
@@ -12,6 +12,7 @@ import { isRoomMember, useChatroomCatalog } from "./useChatroomCatalog.js";
 import { useActiveRoomFeed } from "./useActiveRoomFeed.js";
 import { useRoomUserCounts } from "./useRoomUserCounts.js";
 import { useMessageComposer } from "./useMessageComposer.js";
+import { useActiveRoomSession, type ActiveRoomSessionActions } from "./useActiveRoomSession.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -23,9 +24,6 @@ type DashboardPageProps = {
 export function DashboardPage({
   user, onLogout, loadChatrooms = listChatrooms, createSocket = createChatSocket
 }: DashboardPageProps) {
-  const [activeRoomId, setActiveRoomId] = useState<string>();
-  const [roomError, setRoomError] = useState<string>();
-  const [leaving, setLeaving] = useState(false);
   const {
     rooms, selectedId, selectedRoom, pendingRoom, status, joinRequestId,
     selectRoom, confirmJoin, cancelJoin, clearJoinRequest, markJoined, markLeft,
@@ -33,67 +31,21 @@ export function DashboardPage({
   } = useChatroomCatalog(loadChatrooms);
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
   useRoomUserCounts(socket, isConnected, updateRoomUserCount);
+  const actionsRef = useRef<ActiveRoomSessionActions>({
+    clearFeed: () => undefined,
+    replaceMessages: (_messages: ChatHistoryMessage[]) => undefined,
+    reset: () => undefined,
+    clearError: () => undefined
+  });
+  const session = useActiveRoomSession({
+    socket, isConnected, connectionStatus, selectedId, selectedRoom, joinRequestId,
+    clearJoinRequest, markJoined, markLeft, clearSelection, actionsRef
+  });
+  const { activeRoomId, roomError, leaving, leaveRoom } = session;
   const { messages, notifications, replaceMessages, clearFeed } = useActiveRoomFeed(socket, isConnected, activeRoomId);
-  const { draft, sending, sendError, onDraftChange, handleSubmit, clearError, reset } = useMessageComposer(socket, isConnected, activeRoomId);
-
-  useEffect(() => {
-    if (connectionStatus !== "disconnected") return;
-    setLeaving(false);
-    setActiveRoomId(undefined);
-    clearFeed();
-    reset();
-  }, [connectionStatus]);
-
-  useEffect(() => {
-    if (!socket || !isConnected || !selectedId) return;
-    let active = true;
-    if (!selectedRoom || !isRoomMember(selectedRoom) && joinRequestId !== selectedId) return;
-    setRoomError(undefined);
-    clearError();
-    setActiveRoomId(undefined);
-    clearFeed();
-
-    const join = () => {
-      socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
-        if (!active) return;
-        if (!ack.ok) {
-          clearJoinRequest();
-          setRoomError(ack.error.message);
-          return;
-        }
-        if (ack.data.chatroomId !== selectedId) return;
-        clearJoinRequest();
-        markJoined(selectedId);
-        setActiveRoomId(selectedId);
-        replaceMessages(ack.data.messages);
-      });
-    };
-
-    join();
-
-    return () => { active = false; };
-  }, [isConnected, selectedId, socket]);
-
-  const leaveRoom = () => {
-    const chatroomId = activeRoomId;
-    if (!socket || !isConnected || !chatroomId || selectedRoom?.id !== chatroomId ||
-      !isRoomMember(selectedRoom) || leaving) return;
-    setLeaving(true);
-    setRoomError(undefined);
-    socket.emit("leaveRoom", { chatroomId }, (ack: LeaveRoomAck) => {
-      setLeaving(false);
-      if (!ack.ok) {
-        setRoomError(ack.error.message);
-        return;
-      }
-      if (ack.data.chatroomId !== chatroomId) return;
-      markLeft(chatroomId);
-      clearSelection();
-      setActiveRoomId(undefined);
-      clearFeed();
-      reset();
-    });
-  };
+  const composer = useMessageComposer(socket, isConnected, activeRoomId);
+  const { draft, sending, sendError, onDraftChange, handleSubmit } = composer;
+  actionsRef.current = { clearFeed, replaceMessages, reset: composer.reset, clearError: composer.clearError };
 
   return (
     <main className="dashboard-shell">
