@@ -2,13 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
 import { useChatSocket } from "./useChatSocket.js";
 import { isRoomMember, useChatroomCatalog } from "./useChatroomCatalog.js";
+import { useRoomUserCounts } from "./useRoomUserCounts.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -34,6 +35,7 @@ export function DashboardPage({
     clearSelection, updateRoomUserCount
   } = useChatroomCatalog(loadChatrooms);
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
+  useRoomUserCounts(socket, isConnected, updateRoomUserCount);
 
   useEffect(() => {
     if (connectionStatus !== "disconnected") return;
@@ -95,16 +97,6 @@ export function DashboardPage({
     socket.on("roomNotification", receiveNotification);
     return () => { socket.off("roomNotification", receiveNotification); };
   }, [activeRoomId, isConnected, socket]);
-
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-    const receiveUserCount = (update: RoomUserCountUpdated) => {
-      if (!Number.isInteger(update.numberOfUsers) || update.numberOfUsers < 0) return;
-      updateRoomUserCount(update.chatroomId, update.numberOfUsers);
-    };
-    socket.on("roomUserCountUpdated", receiveUserCount);
-    return () => { socket.off("roomUserCountUpdated", receiveUserCount); };
-  }, [isConnected, socket]);
 
   const leaveRoom = () => {
     const chatroomId = activeRoomId;
