@@ -275,7 +275,7 @@ test("stops rendering messages from a room after switching away", async () => {
   expect(screen.getByText("Current live")).not.toBeNull();
 });
 
-test("renders room join and leave notifications as transient activity", async () => {
+test("renders room join and leave notifications in the activity list", async () => {
   const fixture = socketFixture();
   const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
   const joined: RoomNotification = {
@@ -298,7 +298,8 @@ test("renders room join and leave notifications as transient activity", async ()
   expect(activity.getByText("Lin joined the room")).not.toBeNull();
   expect(activity.getByText("Ada left the room")).not.toBeNull();
   expect(activity.queryByText("Lin joined elsewhere")).toBeNull();
-  expect(activity.getAllByRole("status")).toHaveLength(2);
+  expect(activity.getAllByRole("listitem")).toHaveLength(2);
+  expect(activity.queryByRole("status")).toBeNull();
   expect(activity.getAllByRole("time")[0].getAttribute("datetime")).toBe(joined.createdAt);
   expect(screen.queryByText("No messages yet.")).not.toBeNull();
 });
