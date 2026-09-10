@@ -4,6 +4,7 @@ import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
 import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
+import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
 
 type DashboardPageProps = {
@@ -12,11 +13,6 @@ type DashboardPageProps = {
   readonly loadChatrooms?: () => Promise<ChatroomSummary[]>;
   readonly createSocket?: () => Socket | null;
 };
-
-function formatMessageTime(createdAt: string) {
-  const date = new Date(createdAt);
-  return Number.isNaN(date.getTime()) ? createdAt : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
 
 function isRoomMember(room: ChatroomSummary) {
   return room.isMember !== false;
@@ -230,22 +226,7 @@ export function DashboardPage({
             >{leaving ? "Leaving..." : "Leave chatroom"}</button>}
           </div>
           {roomError && <p role="alert">{roomError}</p>}
-          <div className="message-region" aria-label="Messages" aria-live="polite">
-            {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
-              {notifications.map((notification, index) => <li
-                className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`}
-              >
-                <strong>{notification.identity}</strong><p>{notification.message}</p>
-                <time dateTime={notification.createdAt}>{formatMessageTime(notification.createdAt)}</time>
-              </li>)}
-            </ul>}
-            {messages.length === 0 ? <p>No messages yet.</p> : <ol className="message-list">
-              {messages.map((message) => <li key={message.id}>
-                <strong>{message.sender}</strong><p>{message.message}</p>
-                <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
-              </li>)}
-            </ol>}
-          </div>
+          <ChatMessageFeed messages={messages} notifications={notifications} />
           {sendError && <p role="alert">{sendError}</p>}
           <form className="message-composer" onSubmit={handleSubmit}>
             <input
