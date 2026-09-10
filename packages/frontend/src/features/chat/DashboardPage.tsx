@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
@@ -8,6 +8,7 @@ import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
 import { ChatroomSidebar } from "./ChatroomSidebar.js";
 import { useChatSocket } from "./useChatSocket.js";
+import { isRoomMember, useChatroomCatalog } from "./useChatroomCatalog.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -16,16 +17,9 @@ type DashboardPageProps = {
   readonly createSocket?: () => Socket | null;
 };
 
-function isRoomMember(room: ChatroomSummary) {
-  return room.isMember !== false;
-}
-
 export function DashboardPage({
   user, onLogout, loadChatrooms = listChatrooms, createSocket = createChatSocket
 }: DashboardPageProps) {
-  const [rooms, setRooms] = useState<ChatroomSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string>();
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
@@ -34,8 +28,11 @@ export function DashboardPage({
   const [sending, setSending] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [sendError, setSendError] = useState<string>();
-  const [pendingRoomId, setPendingRoomId] = useState<string>();
-  const requestedJoinId = useRef<string>();
+  const {
+    rooms, selectedId, selectedRoom, pendingRoom, status, joinRequestId,
+    selectRoom, confirmJoin, cancelJoin, clearJoinRequest, markJoined, markLeft,
+    clearSelection, updateRoomUserCount
+  } = useChatroomCatalog(loadChatrooms);
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
 
   useEffect(() => {
@@ -49,8 +46,7 @@ export function DashboardPage({
   useEffect(() => {
     if (!socket || !isConnected || !selectedId) return;
     let active = true;
-    const selectedRoom = rooms.find((room) => room.id === selectedId);
-    if (!selectedRoom || !isRoomMember(selectedRoom) && requestedJoinId.current !== selectedId) return;
+    if (!selectedRoom || !isRoomMember(selectedRoom) && joinRequestId !== selectedId) return;
     setRoomError(undefined);
     setSendError(undefined);
     setActiveRoomId(undefined);
@@ -61,13 +57,13 @@ export function DashboardPage({
       socket.emit("joinRoom", { chatroomId: selectedId }, (ack: JoinRoomAck) => {
         if (!active) return;
         if (!ack.ok) {
-          requestedJoinId.current = undefined;
+          clearJoinRequest();
           setRoomError(ack.error.message);
           return;
         }
         if (ack.data.chatroomId !== selectedId) return;
-        requestedJoinId.current = undefined;
-        setRooms((current) => current.map((room) => room.id === selectedId ? { ...room, isMember: true } : room));
+        clearJoinRequest();
+        markJoined(selectedId);
         setActiveRoomId(selectedId);
         setMessages(ack.data.messages);
       });
@@ -104,46 +100,12 @@ export function DashboardPage({
     if (!socket || !isConnected) return;
     const receiveUserCount = (update: RoomUserCountUpdated) => {
       if (!Number.isInteger(update.numberOfUsers) || update.numberOfUsers < 0) return;
-      setRooms((current) => current.map((room) => room.id === update.chatroomId
-        ? { ...room, numberOfUsers: update.numberOfUsers }
-        : room));
+      updateRoomUserCount(update.chatroomId, update.numberOfUsers);
     };
     socket.on("roomUserCountUpdated", receiveUserCount);
     return () => { socket.off("roomUserCountUpdated", receiveUserCount); };
   }, [isConnected, socket]);
 
-  useEffect(() => {
-    let active = true;
-    loadChatrooms()
-      .then((loaded) => {
-        if (!active) return;
-        const nextRooms = Array.isArray(loaded) ? loaded : [];
-        setRooms(nextRooms);
-        setSelectedId((current) => nextRooms.some((room) => room.id === current && isRoomMember(room))
-          ? current
-          : nextRooms.find(isRoomMember)?.id);
-        setStatus("ready");
-      })
-      .catch(() => active && setStatus("error"));
-    return () => { active = false; };
-  }, [loadChatrooms]);
-
-  const selectedRoom = rooms.find((room) => room.id === selectedId);
-  const pendingRoom = rooms.find((room) => room.id === pendingRoomId);
-  const selectRoom = (room: ChatroomSummary) => {
-    if (!isRoomMember(room)) {
-      setPendingRoomId(room.id);
-      return;
-    }
-    requestedJoinId.current = undefined;
-    setSelectedId(room.id);
-  };
-  const confirmJoin = () => {
-    if (!pendingRoomId) return;
-    requestedJoinId.current = pendingRoomId;
-    setPendingRoomId(undefined);
-    setSelectedId(pendingRoomId);
-  };
   const leaveRoom = () => {
     const chatroomId = activeRoomId;
     if (!socket || !isConnected || !chatroomId || selectedRoom?.id !== chatroomId ||
@@ -157,8 +119,8 @@ export function DashboardPage({
         return;
       }
       if (ack.data.chatroomId !== chatroomId) return;
-      setRooms((current) => current.map((room) => room.id === chatroomId ? { ...room, isMember: false } : room));
-      setSelectedId(undefined);
+      markLeft(chatroomId);
+      clearSelection();
       setActiveRoomId(undefined);
       setMessages([]);
       setNotifications([]);
@@ -213,7 +175,7 @@ export function DashboardPage({
           <h2 id="join-room-heading">Join {pendingRoom.chatroomName}?</h2>
           <p id="join-room-description">Join this group chat to view and send messages.</p>
           <div className="join-dialog__actions">
-            <button className="auth-secondary-button" type="button" onClick={() => setPendingRoomId(undefined)}>Cancel</button>
+            <button className="auth-secondary-button" type="button" onClick={cancelJoin}>Cancel</button>
             <button type="button" onClick={confirmJoin}>Join chatroom</button>
           </div>
         </dialog>
