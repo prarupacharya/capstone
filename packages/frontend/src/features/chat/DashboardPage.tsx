@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
-import type { JoinRoomAck, LeaveRoomAck, SendMessageAck } from "../../realtime/chat-events.types.js";
+import type { JoinRoomAck, LeaveRoomAck } from "../../realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
 import { ChatMessageFeed } from "./ChatMessageFeed.js";
 import { MessageComposer } from "./MessageComposer.js";
@@ -11,6 +11,7 @@ import { useChatSocket } from "./useChatSocket.js";
 import { isRoomMember, useChatroomCatalog } from "./useChatroomCatalog.js";
 import { useActiveRoomFeed } from "./useActiveRoomFeed.js";
 import { useRoomUserCounts } from "./useRoomUserCounts.js";
+import { useMessageComposer } from "./useMessageComposer.js";
 
 type DashboardPageProps = {
   readonly user: CurrentUser;
@@ -24,10 +25,7 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [roomError, setRoomError] = useState<string>();
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [sendError, setSendError] = useState<string>();
   const {
     rooms, selectedId, selectedRoom, pendingRoom, status, joinRequestId,
     selectRoom, confirmJoin, cancelJoin, clearJoinRequest, markJoined, markLeft,
@@ -36,12 +34,14 @@ export function DashboardPage({
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
   useRoomUserCounts(socket, isConnected, updateRoomUserCount);
   const { messages, notifications, replaceMessages, clearFeed } = useActiveRoomFeed(socket, isConnected, activeRoomId);
+  const { draft, sending, sendError, onDraftChange, handleSubmit, clearError, reset } = useMessageComposer(socket, isConnected, activeRoomId);
 
   useEffect(() => {
     if (connectionStatus !== "disconnected") return;
     setLeaving(false);
     setActiveRoomId(undefined);
     clearFeed();
+    reset();
   }, [connectionStatus]);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export function DashboardPage({
     let active = true;
     if (!selectedRoom || !isRoomMember(selectedRoom) && joinRequestId !== selectedId) return;
     setRoomError(undefined);
-    setSendError(undefined);
+    clearError();
     setActiveRoomId(undefined);
     clearFeed();
 
@@ -91,20 +91,7 @@ export function DashboardPage({
       clearSelection();
       setActiveRoomId(undefined);
       clearFeed();
-      setDraft("");
-      setSendError(undefined);
-    });
-  };
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const message = draft.trim();
-    if (!socket || !isConnected || !activeRoomId || !message || sending) return;
-    setSending(true);
-    setSendError(undefined);
-    socket.emit("sendMessage", { chatroomId: activeRoomId, message }, (ack: SendMessageAck) => {
-      setSending(false);
-      if (ack.ok) setDraft("");
-      else setSendError(ack.error.message);
+      reset();
     });
   };
 
@@ -133,7 +120,7 @@ export function DashboardPage({
           {sendError && <p role="alert">{sendError}</p>}
           <MessageComposer
             draft={draft} sending={sending} active={Boolean(activeRoomId)}
-            onDraftChange={setDraft} onSubmit={handleSubmit}
+            onDraftChange={onDraftChange} onSubmit={handleSubmit}
           />
         </section>
       </div>
