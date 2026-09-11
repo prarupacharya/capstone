@@ -3,12 +3,16 @@ import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { AppLogger } from "./app-logger";
 import { runWithCorrelationId } from "./correlation-context";
+import { HttpMetricsService } from "../metrics/http-metrics.service";
 
 const correlationIdHeader = "X-Correlation-ID";
 
 @Injectable()
 export class RequestLoggingMiddleware implements NestMiddleware {
-  constructor(private readonly logger: AppLogger) {}
+  constructor(
+    private readonly logger: AppLogger,
+    private readonly metrics: HttpMetricsService
+  ) {}
 
   use(request: Request, response: Response, next: NextFunction) {
     const startedAt = Date.now();
@@ -24,12 +28,16 @@ export class RequestLoggingMiddleware implements NestMiddleware {
       const statusCode = response.statusCode;
       const level = statusCode >= 500 ? "ERROR" : statusCode >= 400 ? "WARN" : "INFO";
       const requestPath = request.originalUrl ?? request.url;
+      const durationMs = Date.now() - startedAt;
+      const route = request.route?.path ?? request.path;
+
+      this.metrics.recordRequest(route, statusCode, durationMs);
 
       this.logger.writeToFile(request.method, level, "API request completed", {
         method: request.method,
         path: requestPath,
         statusCode,
-        durationMs: Date.now() - startedAt,
+        durationMs,
         correlationId
       });
     };
