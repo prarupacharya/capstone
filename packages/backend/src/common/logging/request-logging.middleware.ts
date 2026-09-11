@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { AppLogger } from "./app-logger";
+import { runWithCorrelationId } from "./correlation-context";
 
 const correlationIdHeader = "X-Correlation-ID";
 
@@ -33,10 +34,11 @@ export class RequestLoggingMiddleware implements NestMiddleware {
       });
     };
 
-    response.once("finish", logRequest);
-    response.once("close", logRequest);
-
-    next();
+    return runWithCorrelationId(correlationId, () => {
+      response.once("finish", logRequest);
+      response.once("close", logRequest);
+      next();
+    });
   }
 
   private getCorrelationId(request: Request) {

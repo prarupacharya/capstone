@@ -2,6 +2,7 @@ jest.mock("node:fs", () => ({ appendFileSync: jest.fn(), mkdirSync: jest.fn() })
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { AppLogger } from "../src/common/logging/app-logger";
+import { runWithCorrelationId } from "../src/common/logging/correlation-context";
 
 const append = appendFileSync as jest.Mock, mkdir = mkdirSync as jest.Mock;
 
@@ -50,6 +51,13 @@ describe("AppLogger", () => {
       "INFO", "INFO", "ERROR", "WARN", "DEBUG", "VERBOSE",
       "INFO", "ERROR", "WARN", "DEBUG", "VERBOSE"
     ]);
+    expect(records.every(({ correlationId }) => correlationId === "system")).toBe(true);
+  });
+
+  it("uses the active correlation context", () => {
+    runWithCorrelationId("request-123", () => logger.write("INFO", "message"));
+
+    expect(getRecords(output)[0]).toEqual(expect.objectContaining({ correlationId: "request-123" }));
   });
 
   it("sanitizes file methods and logs recoverable write failures", () => {
