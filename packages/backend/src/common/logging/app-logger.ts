@@ -5,10 +5,7 @@ import { Injectable, type LoggerService } from "@nestjs/common";
 export type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG" | "VERBOSE";
 const logsDirectory = resolve(__dirname, "../../../logs");
 
-/**
- * Writes backend logs in the format used by the application:
- * [2025-10-06T13:30:00.000Z] [INFO] - Message {"key":"value"}
- */
+/** Writes one structured JSON object per backend log line. */
 @Injectable()
 export class AppLogger implements LoggerService {
   write(level: LogLevel, message: string, metadata?: Record<string, unknown>) {
@@ -21,12 +18,13 @@ export class AppLogger implements LoggerService {
     message: string,
     metadata?: Record<string, unknown>
   ) {
-    const line = this.formatLine(level, message, metadata);
+    const record = this.formatRecord(level, message, metadata);
+    const line = JSON.stringify(record);
     this.output(line);
 
     const safeMethod = method.toUpperCase().replace(/[^A-Z0-9_-]/g, "_") || "UNKNOWN";
     const logDirectory = resolve(logsDirectory, safeMethod);
-    const logFile = resolve(logDirectory, `${line.slice(1, 11)}.log`);
+    const logFile = resolve(logDirectory, `${record.timestamp.slice(0, 10)}.log`);
 
     try {
       mkdirSync(logDirectory, { recursive: true });
@@ -39,10 +37,17 @@ export class AppLogger implements LoggerService {
     }
   }
 
-  private formatLine(level: LogLevel, message: string, metadata?: Record<string, unknown>) {
-    const serializedMetadata = metadata ? ` ${JSON.stringify(metadata)}` : "";
+  private formatRecord(level: LogLevel, message: string, metadata?: Record<string, unknown>) {
+    return {
+      ...(metadata ?? {}),
+      timestamp: new Date().toISOString(),
+      level,
+      message
+    };
+  }
 
-    return `[${new Date().toISOString()}] [${level}] - ${message}${serializedMetadata}`;
+  private formatLine(level: LogLevel, message: string, metadata?: Record<string, unknown>) {
+    return JSON.stringify(this.formatRecord(level, message, metadata));
   }
 
   private output(line: string) {
