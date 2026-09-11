@@ -1,11 +1,15 @@
+x-postgres-environment: &postgres-environment
+  POSTGRES_DB: "${POSTGRES_DB:-capstone}"
+  POSTGRES_USER: "${POSTGRES_USER:-capstone}"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-capstone_dev_only}"
+
 services:
   # =========================
   # Application PostgreSQL
   # =========================
   postgres:
     image: postgres:16-alpine
-    env_file:
-      - ./packages/backend/.env
+    environment: *postgres-environment
     ports:
       - "5432:5432"
     volumes:
@@ -27,13 +31,19 @@ services:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
-    env_file:
-      - ./packages/backend/.env
     environment:
+      PORT: "${BACKEND_PORT:-3000}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:5173}"
+      JWT_SECRET: "${JWT_SECRET:-local-development-secret-change-me-32chars}"
+      JWT_EXPIRES_IN: "${JWT_EXPIRES_IN:-15m}"
       DATABASE_ENABLED: "true"
       DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: "${POSTGRES_DB:-capstone}"
+      DATABASE_USER: "${POSTGRES_USER:-capstone}"
+      DATABASE_PASSWORD: "${POSTGRES_PASSWORD:-capstone_dev_only}"
     ports:
-      - "3000:3000"
+      - "${BACKEND_HOST_PORT:-3000}:${BACKEND_PORT:-3000}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,7 +51,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -q -O - http://localhost:3000/health || exit 1",
+          "wget -q -O - http://localhost:${BACKEND_PORT:-3000}/health || exit 1",
         ]
       interval: 5s
       timeout: 5s
@@ -55,17 +65,27 @@ services:
       context: .
       dockerfile: packages/frontend/Dockerfile
       args:
-        VITE_API_URL: http://localhost:3000
+        VITE_API_URL: "${VITE_API_URL:-http://localhost:3000}"
     ports:
-      - "5173:8080"
+      - "${FRONTEND_HOST_PORT:-5173}:8080"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://localhost:8080/ >/dev/null || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # =========================
   # SonarQube PostgreSQL
   # =========================
   sonarqube-db:
+    profiles: ["quality"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: sonar
@@ -84,6 +104,7 @@ services:
   # SonarQube
   # =========================
   sonarqube:
+    profiles: ["quality"]
     image: sonarqube:community
     depends_on:
       sonarqube-db:
