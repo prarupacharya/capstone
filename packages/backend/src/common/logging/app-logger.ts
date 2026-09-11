@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { Injectable, type LoggerService } from "@nestjs/common";
+import { getCorrelationId } from "./correlation-context";
 
 export type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG" | "VERBOSE";
 const logsDirectory = resolve(__dirname, "../../../logs");
@@ -38,11 +39,17 @@ export class AppLogger implements LoggerService {
   }
 
   private formatRecord(level: LogLevel, message: string, metadata?: Record<string, unknown>) {
+    const metadataCorrelationId = metadata?.correlationId;
+    const fallbackCorrelationId = typeof metadataCorrelationId === "string"
+      ? metadataCorrelationId
+      : undefined;
+
     return {
       ...(metadata ?? {}),
       timestamp: new Date().toISOString(),
       level,
-      message
+      message,
+      correlationId: getCorrelationId(fallbackCorrelationId)
     };
   }
 
