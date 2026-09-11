@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { JwtAuthGuard } from "./common/auth/jwt-auth.guard";
 import { AppLogger } from "./common/logging/app-logger";
 import { RequestLoggingMiddleware } from "./common/logging/request-logging.middleware";
+import { MetricsModule } from "./common/metrics/metrics.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { IsEmailAvailableConstraint } from "./modules/auth/validation/is-email-available.validator";
 import { DatabaseModule } from "./modules/database/database.module";
@@ -11,7 +12,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { UsersModule } from "./modules/users/users.module";
 
 @Module({
-  imports: [AuthModule, ChatModule, DatabaseModule, HealthModule, UsersModule],
+  imports: [AuthModule, ChatModule, DatabaseModule, HealthModule, MetricsModule, UsersModule],
   providers: [
     AppLogger,
     IsEmailAvailableConstraint,

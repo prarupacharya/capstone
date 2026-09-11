@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppLogger } from "../src/common/logging/app-logger";
 import { getCorrelationId } from "../src/common/logging/correlation-context";
+import { HttpMetricsService } from "../src/common/metrics/http-metrics.service";
 import { RequestLoggingMiddleware } from "../src/common/logging/request-logging.middleware";
 
 function createMiddleware(
@@ -10,6 +11,7 @@ function createMiddleware(
   nextImplementation: () => void = () => undefined
 ) {
   const logger = { writeToFile: jest.fn() };
+  const metrics = { recordRequest: jest.fn() };
   const events: Record<string, () => void> = {};
   const response = {
     statusCode,
@@ -20,23 +22,29 @@ function createMiddleware(
     method: "GET",
     originalUrl,
     url: "/fallback",
+    path: originalUrl ?? "/fallback",
     get: jest.fn(() => header)
   } as unknown as Request;
   const next = jest.fn(nextImplementation) as unknown as NextFunction;
-  const middleware = new RequestLoggingMiddleware(logger as unknown as AppLogger);
+  const middleware = new RequestLoggingMiddleware(
+    logger as unknown as AppLogger,
+    metrics as unknown as HttpMetricsService
+  );
   middleware.use(request, response, next);
-  return { events, logger, next, response };
+  return { events, logger, metrics, next, response };
 }
 
 describe("RequestLoggingMiddleware", () => {
   it("reuses safe IDs and logs finish only once at INFO", () => {
-    const { events, logger, next, response } = createMiddleware(200, "request-123", "/health");
+    const { events, logger, metrics, next, response } = createMiddleware(200, "request-123", "/health");
     events.finish();
     events.close();
 
     expect(response.setHeader).toHaveBeenCalledWith("X-Correlation-ID", "request-123");
     expect(next).toHaveBeenCalledTimes(1);
     expect(logger.writeToFile).toHaveBeenCalledTimes(1);
+    expect(metrics.recordRequest).toHaveBeenCalledTimes(1);
+    expect(metrics.recordRequest).toHaveBeenCalledWith("/health", 200, expect.any(Number));
     expect(logger.writeToFile).toHaveBeenCalledWith("GET", "INFO", "API request completed", expect.objectContaining({ path: "/health", statusCode: 200, correlationId: "request-123" }));
   });
 
@@ -50,11 +58,12 @@ describe("RequestLoggingMiddleware", () => {
   });
 
   it.each([[400, "WARN"], [500, "ERROR"]] as const)("maps %i responses to %s", (statusCode, level) => {
-    const { events, logger, response } = createMiddleware(statusCode, "unsafe/id");
+    const { events, logger, metrics, response } = createMiddleware(statusCode, "unsafe/id");
     events.close();
 
     const generatedId = (response.setHeader as jest.Mock).mock.calls[0][1];
     expect(generatedId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(metrics.recordRequest).toHaveBeenCalledWith("/fallback", statusCode, expect.any(Number));
     expect(logger.writeToFile).toHaveBeenCalledWith("GET", level, "API request completed", expect.objectContaining({ path: "/fallback", statusCode }));
   });
 });
