@@ -31,7 +31,10 @@ describe("request logging", () => {
       console.log = log;
     }
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/\[WARN\] - API request completed/);
-    expect(lines[0]).toContain('"correlationId":"request-from-test"');
+    expect(JSON.parse(lines[0])).toEqual(expect.objectContaining({
+      level: "WARN",
+      message: "API request completed",
+      correlationId: "request-from-test"
+    }));
   });
 });
