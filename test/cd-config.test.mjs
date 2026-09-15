@@ -12,6 +12,15 @@ const frontendPackage = JSON.parse(readFileSync(join(root, "packages/frontend/pa
 const sonarExample = readFileSync(join(root, ".sonar-project.properties.example"), "utf8");
 const sonarScript = readFileSync(join(root, "scripts/sonar.mjs"), "utf8");
 
+function assertStepBefore(earlierStep, laterStep) {
+  const earlierIndex = workflow.indexOf(`- name: ${earlierStep}`);
+  const laterIndex = workflow.indexOf(`- name: ${laterStep}`);
+
+  assert.notEqual(earlierIndex, -1, `missing CD step: ${earlierStep}`);
+  assert.notEqual(laterIndex, -1, `missing CD step: ${laterStep}`);
+  assert.ok(earlierIndex < laterIndex, `${earlierStep} must run before ${laterStep}`);
+}
+
 test("CD runs on main pushes and manual dispatch", () => {
   assert.match(workflow, /push:\s+branches: \[main\]/);
   assert.match(workflow, /workflow_dispatch:/);
@@ -36,6 +45,37 @@ test("CD records an immutable artifact and DORA metadata", () => {
   assert.match(workflow, /github\.run_started_at/);
   assert.match(workflow, /completed_at/);
   assert.match(workflow, /job\.status/);
+  assert.match(workflow, /BACKEND_DIGEST: \$\{\{ steps\.backend-image\.outputs\.digest \}\}/);
+  assert.match(workflow, /FRONTEND_DIGEST: \$\{\{ steps\.frontend-image\.outputs\.digest \}\}/);
+  assert.match(workflow, /"backend_digest": "\$\{BACKEND_DIGEST\}"/);
+  assert.match(workflow, /"frontend_digest": "\$\{FRONTEND_DIGEST\}"/);
+});
+
+test("CD authenticates to GHCR with least-privilege package access", () => {
+  assert.match(workflow, /permissions:\s+contents: read\s+packages: write/);
+  assert.match(workflow, /REGISTRY: ghcr\.io/);
+  assert.match(workflow, /uses: docker\/setup-buildx-action@[a-f0-9]{40}/);
+  assert.match(workflow, /uses: docker\/login-action@[a-f0-9]{40}/);
+  assert.match(workflow, /registry: \$\{\{ env\.REGISTRY \}\}/);
+  assert.match(workflow, /username: \$\{\{ github\.actor \}\}/);
+  assert.match(workflow, /password: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+});
+
+test("CD publishes backend and frontend images with release tags", () => {
+  assert.match(workflow, /BACKEND_IMAGE: ghcr\.io\/\$\{\{ github\.repository \}\}-backend/);
+  assert.match(workflow, /FRONTEND_IMAGE: ghcr\.io\/\$\{\{ github\.repository \}\}-frontend/);
+  assert.equal(workflow.match(/uses: docker\/metadata-action@[a-f0-9]{40}/g)?.length, 2);
+  assert.equal(workflow.match(/type=sha,format=long/g)?.length, 2);
+  assert.equal(workflow.match(/type=raw,value=latest,enable=\{\{is_default_branch\}\}/g)?.length, 2);
+  assert.equal(workflow.match(/uses: docker\/build-push-action@[a-f0-9]{40}/g)?.length, 2);
+  assert.match(workflow, /file: packages\/backend\/Dockerfile/);
+  assert.match(workflow, /file: packages\/frontend\/Dockerfile/);
+  assert.equal(workflow.match(/push: true/g)?.length, 2);
+
+  assertStepBefore("Run quality gates", "Build and push backend image");
+  assertStepBefore("Build applications", "Build and push backend image");
+  assertStepBefore("Run quality gates", "Build and push frontend image");
+  assertStepBefore("Build applications", "Build and push frontend image");
 });
 
 test("backend tests enforce and publish the coverage gate", () => {
