@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // The frontend already declares this client, so an npm install at the repo root is enough.
 const requireFrontend = createRequire(new URL("../packages/frontend/package.json", import.meta.url));
 const { io } = requireFrontend("socket.io-client");
-const STAGES = ["register", "login", "rooms", "connect", "join", "send"];
+const STAGES = ["register", "login", "rooms", "connect", "join", "send", "leave"];
 
 function positiveInteger(value, flag, { allowZero = false } = {}) {
   const number = Number(value);
@@ -140,6 +140,8 @@ export async function runStress(options) {
     const timings = {};
     let stage = "register";
     let socket;
+    let chatroomId;
+    let joinedRoom = false;
     async function step(name, operation) {
       stage = name;
       const start = performance.now();
@@ -151,6 +153,18 @@ export async function runStress(options) {
         timings[name] = { ok: false, ms: Math.round(performance.now() - start) };
         throw error;
       }
+    }
+
+    async function leaveRoom() {
+      await step("leave", async () => {
+        const left = await socket.timeout(options.timeoutMs).emitWithAck(
+          "leaveRoom", { chatroomId }
+        );
+        if (!left?.ok || left.data?.chatroomId !== chatroomId) {
+          throw new Error(`leaveRoom rejected: ${left?.error?.code ?? "invalid acknowledgement"}`);
+        }
+      });
+      joinedRoom = false;
     }
 
     try {
@@ -177,6 +191,7 @@ export async function runStress(options) {
         if (!room?.id) throw new Error("General room was not found");
         return room;
       });
+      chatroomId = general.id;
 
       socket = await step("connect", () => connect(options.url, login.accessToken, options.timeoutMs));
       openSockets.add(socket);
@@ -185,30 +200,40 @@ export async function runStress(options) {
 
       await step("join", async () => {
         const joined = await socket.timeout(options.timeoutMs).emitWithAck(
-          "joinRoom", { chatroomId: general.id }
+          "joinRoom", { chatroomId }
         );
-        if (!joined?.ok || joined.data?.chatroomId !== general.id) {
+        if (!joined?.ok || joined.data?.chatroomId !== chatroomId) {
           throw new Error(`joinRoom rejected: ${joined?.error?.code ?? "invalid acknowledgement"}`);
         }
       });
+      joinedRoom = true;
 
       const message = `Stress test ${runId}, user ${index}`;
       await step("send", async () => {
         const sent = await socket.timeout(options.timeoutMs).emitWithAck(
-          "sendMessage", { chatroomId: general.id, message }
+          "sendMessage", { chatroomId, message }
         );
-        if (!sent?.ok || sent.data?.chatroomId !== general.id || sent.data?.message !== message ||
+        if (!sent?.ok || sent.data?.chatroomId !== chatroomId || sent.data?.message !== message ||
             sent.data?.senderEmail !== email || !sent.data?.id) {
           throw new Error(`sendMessage rejected: ${sent?.error?.code ?? "invalid acknowledgement"}`);
         }
       });
+      await leaveRoom();
       return { index, ok: true, timings };
     } catch (error) {
+      const failedStage = stage;
+      if (joinedRoom && failedStage !== "leave" && socket?.connected) {
+        try {
+          await leaveRoom();
+        } catch {
+          // Preserve the original failure while still recording the leave attempt.
+        }
+      }
       if (socket) {
         socket.disconnect();
         openSockets.delete(socket);
       }
-      return { index, ok: false, timings, error: { stage, message: error.message } };
+      return { index, ok: false, timings, error: { stage: failedStage, message: error.message } };
     }
   }
 
