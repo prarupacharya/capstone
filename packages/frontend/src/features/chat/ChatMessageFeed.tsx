@@ -28,8 +28,9 @@ export function ChatMessageFeed({ messages, notifications, currentUserId }: Chat
           key={message.id}
         >
           <div className="message-bubble">
-            <strong>{message.sender}</strong><p>{message.message}</p>
-            <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+            <strong className="message-sender">{message.senderEmail ?? message.sender}</strong>
+            <p>{message.message}</p>
+            <time className="message-time" dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
           </div>
         </li>)}
       </ul>}
