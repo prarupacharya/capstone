@@ -1,4 +1,5 @@
 import type { Server, Socket } from "socket.io";
+import type { AppLogger } from "../src/common/logging/app-logger";
 import { ChatGateway } from "../src/modules/chat/chat.gateway";
 import type { ChatroomsRepository } from "../src/modules/chat/chatrooms.repository";
 import type { ChatsRepository } from "../src/modules/chat/chats.repository";
@@ -38,12 +39,14 @@ function createGateway() {
     countActiveMembers: jest.fn(),
     endMembership: jest.fn()
   };
+  const logger = { writeToFile: jest.fn() };
   const gateway = new ChatGateway(
     authService as unknown as WsJwtAuthService,
     chatroomsRepository as unknown as ChatroomsRepository,
     chatsRepository as unknown as ChatsRepository,
     roomPresenceService as unknown as RoomPresenceService,
-    userChatroomsRepository as unknown as UserChatroomsRepository
+    userChatroomsRepository as unknown as UserChatroomsRepository,
+    logger as unknown as AppLogger
   );
   const server = {
     use: jest.fn(),
@@ -58,7 +61,7 @@ function createGateway() {
     next: (error?: Error) => void
   ) => void;
 
-  return { authService, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository, gateway, middleware, server };
+  return { authService, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository, logger, gateway, middleware, server };
 }
 
 const waitForAuthentication = () =>
@@ -68,7 +71,7 @@ const waitForAuthentication = () =>
 
 describe("ChatGateway", () => {
   it("registers middleware and stores an authenticated socket user", async () => {
-    const { authService, gateway, middleware, server } = createGateway();
+    const { authService, gateway, middleware, server, logger } = createGateway();
     const user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const socket = createSocket("valid-token");
     const next = jest.fn();
@@ -81,10 +84,15 @@ describe("ChatGateway", () => {
     expect(authService.authenticate).toHaveBeenCalledWith("valid-token");
     expect(socket.data.user).toEqual(user);
     expect(next).toHaveBeenCalledWith();
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "INFO", "WebSocket connection accepted", {
+      event: "connection", outcome: "accepted", socketId: "socket-1", userId: "user-123"
+    });
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("valid-token");
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("user@example.com");
   });
 
   it("rejects sockets when authentication fails without exposing the cause", async () => {
-    const { authService, middleware } = createGateway();
+    const { authService, middleware, logger } = createGateway();
     const socket = createSocket("expired-token");
     const next = jest.fn();
     authService.authenticate.mockRejectedValue(new Error("token details"));
@@ -94,10 +102,15 @@ describe("ChatGateway", () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Unauthorized" }));
     expect(next.mock.calls[0][0].message).not.toContain("token details");
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "WARN", "WebSocket connection rejected", {
+      event: "connection", outcome: "rejected", socketId: "socket-1", errorCode: "UNAUTHORIZED"
+    });
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("expired-token");
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("token details");
   });
 
   it("joins an existing room and records first-user membership", async () => {
-    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, userChatroomsRepository, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -129,6 +142,11 @@ describe("ChatGateway", () => {
     expect((server.emit as jest.Mock)).toHaveBeenCalledWith(
       "roomUserCountUpdated", { chatroomId, numberOfUsers: 1 }
     );
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "INFO", "WebSocket joinRoom success", {
+      event: "joinRoom", outcome: "success", socketId: "socket-1", userId: "user-123", chatroomId
+    });
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("Hello");
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("user@example.com");
   });
 
   it("reopens an existing membership without announcing a new join", async () => {
@@ -262,7 +280,7 @@ describe("ChatGateway", () => {
   });
 
   it("ends durable membership and announces the updated presence", async () => {
-    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const { gateway, chatroomsRepository, roomPresenceService, userChatroomsRepository, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -291,6 +309,9 @@ describe("ChatGateway", () => {
     expect(server.emit).toHaveBeenCalledWith(
       "roomUserCountUpdated", { chatroomId, numberOfUsers: 3 }
     );
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "INFO", "WebSocket leaveRoom success", {
+      event: "leaveRoom", outcome: "success", socketId: "socket-1", userId: "user-123", chatroomId
+    });
   });
 
   it("detaches every local socket for the room without touching other rooms", async () => {
@@ -334,7 +355,7 @@ describe("ChatGateway", () => {
   });
 
   it("cleans transient presence without ending membership on disconnect", async () => {
-    const { gateway, roomPresenceService, userChatroomsRepository, server } = createGateway();
+    const { gateway, roomPresenceService, userChatroomsRepository, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -349,6 +370,9 @@ describe("ChatGateway", () => {
     expect(userChatroomsRepository.endMembership).not.toHaveBeenCalled();
     expect(socket.to).not.toHaveBeenCalled();
     expect(server.emit).not.toHaveBeenCalled();
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "INFO", "WebSocket disconnected", {
+      event: "disconnect", outcome: "completed", socketId: "socket-1", userId: "user-123"
+    });
   });
 
   it("cleans every room without changing membership on a multi-room disconnect", async () => {
@@ -388,7 +412,7 @@ describe("ChatGateway", () => {
   });
 
   it("persists a trimmed message before broadcasting the saved record", async () => {
-    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, server } = createGateway();
+    const { gateway, chatroomsRepository, chatsRepository, roomPresenceService, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -410,10 +434,14 @@ describe("ChatGateway", () => {
     expect((server.to as jest.Mock).mock.results[0].value.emit).toHaveBeenCalledWith("newMessage", saved);
     expect(chatsRepository.saveMessage.mock.invocationCallOrder[0])
       .toBeLessThan((server.to as jest.Mock).mock.invocationCallOrder[0]);
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "INFO", "WebSocket sendMessage success", {
+      event: "sendMessage", outcome: "success", socketId: "socket-1", userId: "user-123", chatroomId
+    });
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("Hello");
   });
 
   it("rejects invalid, nonexistent, and nonmember messages without broadcasting", async () => {
-    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server } = createGateway();
+    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -440,10 +468,18 @@ describe("ChatGateway", () => {
     });
     expect(chatsRepository.saveMessage).not.toHaveBeenCalled();
     expect(server.to).not.toHaveBeenCalled();
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "WARN", "WebSocket sendMessage failure", {
+      event: "sendMessage", outcome: "failure", socketId: "socket-1", userId: "user-123",
+      errorCode: "INVALID_PAYLOAD"
+    });
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "WARN", "WebSocket sendMessage failure", {
+      event: "sendMessage", outcome: "failure", socketId: "socket-1", userId: "user-123", chatroomId,
+      errorCode: "NOT_MEMBER"
+    });
   });
 
   it("does not broadcast when message persistence fails", async () => {
-    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server } = createGateway();
+    const { gateway, chatroomsRepository, roomPresenceService, chatsRepository, server, logger } = createGateway();
     const socket = createSocket("valid-token");
     socket.data.user = { id: "user-123", email: "user@example.com", userType: "generaluser" };
     const chatroomId = "11111111-1111-4111-8111-111111111111";
@@ -455,5 +491,11 @@ describe("ChatGateway", () => {
       ok: false, error: { code: "MESSAGE_FAILED" }
     });
     expect(server.to).not.toHaveBeenCalled();
+    expect(logger.writeToFile).toHaveBeenCalledWith("WEBSOCKET", "ERROR", "WebSocket sendMessage failure", {
+      event: "sendMessage", outcome: "failure", socketId: "socket-1", userId: "user-123", chatroomId,
+      errorCode: "MESSAGE_FAILED"
+    });
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("database unavailable");
+    expect(JSON.stringify(logger.writeToFile.mock.calls)).not.toContain("Hello");
   });
 });
