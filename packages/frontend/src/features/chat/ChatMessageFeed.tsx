@@ -21,8 +21,22 @@ export function ChatMessageFeed({ messages, notifications, currentUserId }: Chat
   }, [messages, notifications]);
 
   return (
-    <div ref={messageRegionRef} className="message-region" aria-label="Messages" aria-live="polite">
-      {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
+    <>
+      <div ref={messageRegionRef} className="message-region" aria-label="Messages" aria-live="polite">
+        {messages.length === 0 ? <p>No messages yet.</p> : <ul className="message-list" aria-label="Chat messages">
+          {messages.map((message) => <li
+            className={`message-row ${message.senderId !== undefined && message.senderId === currentUserId ? "message-row--own" : "message-row--other"}`}
+            key={message.id}
+          >
+            <div className="message-bubble">
+              <strong className="message-sender">{message.senderEmail ?? message.sender}</strong>
+              <p>{message.message}</p>
+              <time className="message-time" dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+            </div>
+          </li>)}
+        </ul>}
+      </div>
+      {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity" aria-live="polite">
         {notifications.map((notification, index) => <li
           className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`}
         >
@@ -30,18 +44,6 @@ export function ChatMessageFeed({ messages, notifications, currentUserId }: Chat
           <time dateTime={notification.createdAt}>{formatMessageTime(notification.createdAt)}</time>
         </li>)}
       </ul>}
-      {messages.length === 0 ? <p>No messages yet.</p> : <ul className="message-list" aria-label="Chat messages">
-        {messages.map((message) => <li
-          className={`message-row ${message.senderId !== undefined && message.senderId === currentUserId ? "message-row--own" : "message-row--other"}`}
-          key={message.id}
-        >
-          <div className="message-bubble">
-            <strong className="message-sender">{message.senderEmail ?? message.sender}</strong>
-            <p>{message.message}</p>
-            <time className="message-time" dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
-          </div>
-        </li>)}
-      </ul>}
-    </div>
+    </>
   );
 }

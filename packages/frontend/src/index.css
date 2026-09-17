@@ -187,8 +187,8 @@ main {
 .leave-chatroom-button { padding: 0.55rem 0.75rem; border: 1px solid #dc2626; border-radius: 0.5rem; color: #b91c1c; background: #fff; cursor: pointer; font: inherit; font-weight: 700; }
 .leave-chatroom-button:disabled { cursor: not-allowed; opacity: 0.65; }
 .message-region { flex: 1; min-height: 0; overflow-y: auto; padding: 1rem; color: #64748b; background: #f8fafc; }
-.room-notification-list { display: grid; gap: 0.5rem; margin: 0 0 1rem; padding: 0; list-style: none; }
-.room-notification { padding: 0.65rem 0.8rem; border-left: 3px solid #818cf8; color: #475569; background: #eef2ff; }
+.room-notification-list { flex: 0 0 auto; display: grid; gap: 0.35rem; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.room-notification { padding: 0.45rem 0.65rem; border-left: 3px solid #818cf8; border-radius: 0 0.5rem 0.5rem 0; color: #475569; background: #eef2ff; font-size: 0.85rem; }
 .room-notification strong { display: block; color: #3730a3; }
 .room-notification p { margin: 0.2rem 0; }
 .room-notification time { font-size: 0.8rem; }
