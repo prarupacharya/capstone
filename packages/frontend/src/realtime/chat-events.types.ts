@@ -1,6 +1,9 @@
 export interface ChatHistoryMessage {
   id: string;
   chatroomId: string;
+  /** Stable identity fields used for ownership and attribution; optional for older server payloads. */
+  senderId?: string;
+  senderEmail?: string;
   sender: string;
   message: string;
   createdAt: string;

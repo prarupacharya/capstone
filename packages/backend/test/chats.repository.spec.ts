@@ -7,7 +7,9 @@ import { ChatsRepository } from "../src/modules/chat/chats.repository";
 const row = {
   id: "message-1",
   chatroom_id: "room-1",
-  sender: "alice@example.com",
+  sender_id: "user-1",
+  sender_email: "alice@example.com",
+  sender: "alice",
   message: "Hello",
   created_at: new Date("2026-01-01T00:00:00.000Z")
 };
@@ -24,13 +26,16 @@ describe("ChatsRepository", () => {
     await expect(repository.saveMessage({
       chatroomId: "room-1", fromUserId: "user-1", message: "  Hello  "
     })).resolves.toEqual({
-      id: "message-1", chatroomId: "room-1", sender: "alice@example.com",
+      id: "message-1", chatroomId: "room-1", senderId: "user-1", senderEmail: "alice@example.com",
+      sender: "alice",
       message: "Hello", createdAt: row.created_at
     });
     expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO chats"), [
       "room-1", "user-1", "Hello"
     ]);
     expect(query.mock.calls[0][0]).toContain("COALESCE(users.username, users.email)");
+    expect(query.mock.calls[0][0]).toContain("saved.from_user_id AS sender_id");
+    expect(query.mock.calls[0][0]).toContain("users.email AS sender_email");
     expect(query.mock.calls[0][0]).toContain("created_at");
   });
 
@@ -54,6 +59,8 @@ describe("ChatsRepository", () => {
     await expect(repository.listLatestMessages("room-1")).resolves.toEqual(history.map((message) => ({
       id: message.id,
       chatroomId: message.chatroom_id,
+      senderId: message.sender_id,
+      senderEmail: message.sender_email,
       sender: message.sender,
       message: message.message,
       createdAt: message.created_at
@@ -88,7 +95,8 @@ describe("ChatsRepository", () => {
       const input = { chatroomId: room.rows[0].id, fromUserId: user.rows[0].id, message: "  Hello  " };
 
       await expect(repository.saveMessage(input)).resolves.toMatchObject({
-        chatroomId: input.chatroomId, sender: "message@example.com", message: "Hello"
+        chatroomId: input.chatroomId, senderId: input.fromUserId, senderEmail: "message@example.com",
+        sender: "message@example.com", message: "Hello"
       });
       await expect(repository.saveMessage({ ...input, message: "   " })).rejects.toMatchObject({ code: "23514" });
       await expect(repository.saveMessage({ ...input, message: "x".repeat(2001) })).rejects.toMatchObject({ code: "22001" });
