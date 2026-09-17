@@ -31,7 +31,9 @@ describe("GET /metrics", () => {
     expect(response.headers.get("content-type")).toContain("text/plain");
     expect(body).toContain("# TYPE http_request_duration_seconds histogram");
     expect(body).toContain("# TYPE http_requests_total counter");
+    expect(body).toContain("# TYPE http_errors_total counter");
     expect(body).toContain('http_requests_total{route="/health",status_code="200"} 1');
+    expect(body).not.toContain('http_errors_total{route="/health",status_code="200"}');
   });
 
   it("updates labeled metrics after an API error", async () => {
@@ -42,5 +44,6 @@ describe("GET /metrics", () => {
     const body = await metricsResponse.text();
 
     expect(body).toContain('http_requests_total{route="/does-not-exist",status_code="404"} 1');
+    expect(body).toContain('http_errors_total{route="/does-not-exist",status_code="404"} 1');
   });
 });
