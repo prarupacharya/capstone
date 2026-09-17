@@ -15,7 +15,7 @@ test("renders the empty message state without activity", () => {
 
 test("renders messages and room activity with safe timestamps", () => {
   const message: ChatHistoryMessage = {
-    id: "message-1", chatroomId: "room-1", sender: "Ada", message: "Welcome",
+    id: "message-1", chatroomId: "room-1", senderEmail: "ada@example.com", sender: "Ada", message: "Welcome",
     createdAt: "2026-01-01T12:00:00.000Z"
   };
   const notification: RoomNotification = {
@@ -27,6 +27,7 @@ test("renders messages and room activity with safe timestamps", () => {
 
   const feed = screen.getByLabelText("Messages");
   expect(within(feed).getByText("Welcome")).not.toBeNull();
+  expect(within(feed).getByText("ada@example.com")).not.toBeNull();
   expect(within(feed).getByText("Lin joined the room")).not.toBeNull();
   const times = within(feed).getAllByRole("time");
   expect(times[0].textContent).toBe("not-a-date");
@@ -56,4 +57,29 @@ test("classifies messages by sender ID and removes ordered-list counters", () =>
   expect(items[2].className).toContain("message-row--other");
   expect(list.tagName).toBe("UL");
   expect(within(list).queryByRole("list", { name: "Chat messages" })).toBeNull();
+});
+
+test("falls back to the sender label when a message email is unavailable", () => {
+  const message: ChatHistoryMessage = {
+    id: "legacy", chatroomId: "room-1", sender: "Pat", message: "Legacy",
+    createdAt: "2026-01-01T12:00:00.000Z"
+  };
+
+  render(<ChatMessageFeed messages={[message]} notifications={[]} />);
+
+  expect(screen.getByText("Pat")).not.toBeNull();
+});
+
+test("keeps message text, email, and timestamp in separate elements", () => {
+  const message: ChatHistoryMessage = {
+    id: "metadata", chatroomId: "room-1", senderEmail: "ada@example.com", sender: "Ada",
+    message: "Metadata", createdAt: "2026-01-01T12:00:00.000Z"
+  };
+
+  render(<ChatMessageFeed messages={[message]} notifications={[]} />);
+
+  const bubble = screen.getByText("Metadata").parentElement;
+  expect(bubble?.querySelector(".message-sender")?.textContent).toBe("ada@example.com");
+  expect(bubble?.querySelector("p")?.textContent).toBe("Metadata");
+  expect(bubble?.querySelector(".message-time")?.getAttribute("datetime")).toBe(message.createdAt);
 });

@@ -12,8 +12,8 @@ socketServer.on("connection", (socket) => {
   socket.on("joinRoom", (payload: { chatroomId?: string }, acknowledge: (response: unknown) => void) => {
     const chatroomId = payload.chatroomId ?? "";
     const messages = chatroomId === "room-1" ? [
-      { id: "message-1", chatroomId, senderId: "user-123", sender: "user@example.com", message: "My message", createdAt: "2026-01-01T12:00:00.000Z" },
-      { id: "message-2", chatroomId, senderId: "user-456", sender: "other@example.com", message: "Other message", createdAt: "2026-01-01T12:01:00.000Z" }
+      { id: "message-1", chatroomId, senderId: "user-123", senderEmail: "user@example.com", sender: "User", message: "My message", createdAt: "2026-01-01T12:00:00.000Z" },
+      { id: "message-2", chatroomId, senderId: "user-456", senderEmail: "other@example.com", sender: "Other", message: "Other message", createdAt: "2026-01-01T12:01:00.000Z" }
     ] : [];
     acknowledge({ ok: true, data: { chatroomId, messages } });
     setTimeout(() => socket.emit("roomUserCountUpdated", { chatroomId, numberOfUsers: 4 }), 100);
@@ -88,6 +88,17 @@ test("updates the visible room count from the socket without refetching", async 
   await expect(page.locator(".message-row--other")).toHaveCSS("justify-content", "flex-start");
   await expect(page.locator(".message-row--other .message-bubble")).toHaveCSS("background-color", "rgb(219, 234, 254)");
   await expect(page.locator("ol.message-list")).toHaveCount(0);
+  await expect(page.locator(".message-row--own .message-sender")).toHaveText("user@example.com");
+  await expect(page.locator(".message-row--other .message-sender")).toHaveText("other@example.com");
+  await expect(page.locator(".message-row--other .message-bubble")).toHaveCSS("overflow-wrap", "anywhere");
+  const metadataSizes = await page.locator(".message-row--own .message-bubble").evaluate((bubble) => {
+    const textSize = Number.parseFloat(getComputedStyle(bubble.querySelector("p")!).fontSize);
+    const senderSize = Number.parseFloat(getComputedStyle(bubble.querySelector(".message-sender")!).fontSize);
+    const timeSize = Number.parseFloat(getComputedStyle(bubble.querySelector(".message-time")!).fontSize);
+    return { textSize, senderSize, timeSize };
+  });
+  expect(metadataSizes.senderSize).toBeLessThan(metadataSizes.textSize);
+  expect(metadataSizes.timeSize).toBeLessThan(metadataSizes.textSize);
   await page.getByRole("button", { name: /Support\s+1/ }).click();
   await page.getByRole("button", { name: "Join chatroom" }).click();
   await expect(page.getByRole("heading", { name: "Support" })).toBeVisible();
