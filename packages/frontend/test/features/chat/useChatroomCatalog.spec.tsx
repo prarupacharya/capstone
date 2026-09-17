@@ -47,3 +47,15 @@ test("keeps selection while confirming an unjoined room and applies membership c
   expect(result.current.selectedId).toBeUndefined();
   expect(result.current.rooms.find((room) => room.id === "room-2")?.isMember).toBe(false);
 });
+
+test("adds a created room once and keeps the catalog sorted", async () => {
+  const loader = deferredLoader();
+  const { result } = renderHook(() => useChatroomCatalog(loader.loadChatrooms));
+  await act(async () => { loader.resolveRooms(rooms); await Promise.resolve(); await Promise.resolve(); });
+
+  act(() => result.current.addRoom({ id: "room-3", chatroomName: "Announcements", createdAt: "2026-01-03", numberOfUsers: 0, isMember: false }));
+  act(() => result.current.addRoom({ id: "room-3", chatroomName: "Announcements", createdAt: "2026-01-03", numberOfUsers: 0, isMember: false }));
+
+  expect(result.current.rooms.map((room) => room.chatroomName)).toEqual(["Announcements", "General", "Support"]);
+  expect(result.current.rooms).toHaveLength(3);
+});

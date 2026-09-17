@@ -1,6 +1,6 @@
 import { afterEach, expect, jest, test } from "@jest/globals";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ChatroomSummary } from "../../../src/api/chatrooms.js";
+import type { ChatroomSummary, CreateChatroomInput } from "../../../src/api/chatrooms.js";
 import { DashboardPage } from "../../../src/features/chat/DashboardPage.js";
 import type { ChatHistoryMessage, JoinRoomAck, LeaveRoomAck, RoomNotification, RoomUserCountUpdated, SendMessageAck } from "../../../src/realtime/chat-events.types.js";
 import type { Socket } from "socket.io-client";
@@ -57,6 +57,27 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
   expect(screen.queryByText("Welcome")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Log out" }));
   expect(onLogout).toHaveBeenCalledTimes(1);
+});
+
+test("creates a room and adds it to the sidebar without changing the active chat", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [
+    { id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2, isMember: true }
+  ];
+  const created = { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 0, isMember: false };
+  const createChatroom = jest.fn<(input: CreateChatroomInput) => Promise<ChatroomSummary>>().mockResolvedValue(created);
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms}
+    createChatroom={createChatroom} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledWith("joinRoom", { chatroomId: "room-1" }, expect.any(Function)));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  fireEvent.change(screen.getByLabelText("New chatroom"), { target: { value: "  Support  " } });
+  fireEvent.submit(screen.getByRole("form", { name: "Create chatroom" }));
+
+  await waitFor(() => expect(createChatroom).toHaveBeenCalledWith({ chatroomName: "Support" }));
+  expect(screen.getByRole("button", { name: /Support\s+0\s+Not joined/ })).not.toBeNull();
+  expect(screen.getByRole("heading", { name: "General" })).not.toBeNull();
 });
 
 test("leaves only the active room after one successful request", async () => {
