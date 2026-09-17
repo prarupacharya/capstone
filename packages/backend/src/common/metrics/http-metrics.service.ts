@@ -14,11 +14,21 @@ export const httpRequestsTotal = new promClient.Counter({
   labelNames: ["route", "status_code"]
 });
 
+export const httpErrorsTotal = new promClient.Counter({
+  name: "http_errors_total",
+  help: "Total number of HTTP error responses",
+  labelNames: ["route", "status_code"]
+});
+
 @Injectable()
 export class HttpMetricsService {
   recordRequest(route: string, statusCode: number, durationMs: number) {
     const labels = { route, status_code: String(statusCode) };
     httpRequestDuration.observe(labels, durationMs / 1000);
     httpRequestsTotal.inc(labels);
+
+    if (statusCode >= 400 && statusCode < 600) {
+      httpErrorsTotal.inc(labels);
+    }
   }
 }
