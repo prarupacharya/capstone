@@ -24,9 +24,9 @@ export function useActiveRoomFeed(
     if (!socket || !isConnected || !activeRoomId) return;
     const receiveNotification = (notification: RoomNotification) => {
       if (notification.chatroomId !== activeRoomId) return;
-      setNotifications((current) => notification.type === "user_joined"
-        ? [...current.filter((existing) => existing.type !== "user_joined"), notification]
-        : [...current, notification]);
+      setNotifications((current) => [
+        ...current.filter((existing) => existing.type !== notification.type), notification
+      ]);
     };
     socket.on("roomNotification", receiveNotification);
     return () => { socket.off("roomNotification", receiveNotification); };

@@ -326,7 +326,7 @@ test("renders room join and leave notifications in the activity list", async () 
   expect(screen.queryByText("No messages yet.")).not.toBeNull();
 });
 
-test("replaces the previous join announcement when another user joins", async () => {
+test("replaces the previous join or leave announcement with the latest event", async () => {
   const fixture = socketFixture();
   const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
   const firstJoin: RoomNotification = {
@@ -336,18 +336,28 @@ test("replaces the previous join announcement when another user joins", async ()
   const secondJoin: RoomNotification = {
     ...firstJoin, userId: "user-4", identity: "Max", message: "Max joined the room", createdAt: "2026-01-01T12:03:00.000Z"
   };
+  const firstLeave: RoomNotification = {
+    ...firstJoin, type: "user_left", userId: "user-3", identity: "Ada", message: "Ada left the room", createdAt: "2026-01-01T12:02:00.000Z"
+  };
+  const secondLeave: RoomNotification = {
+    ...firstLeave, userId: "user-5", identity: "Jo", message: "Jo left the room", createdAt: "2026-01-01T12:04:00.000Z"
+  };
   render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
 
   await act(async () => fixture.socket.connect());
   await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
   await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
   await act(async () => fixture.trigger("roomNotification", firstJoin));
+  await act(async () => fixture.trigger("roomNotification", firstLeave));
+  await act(async () => fixture.trigger("roomNotification", secondLeave));
   await act(async () => fixture.trigger("roomNotification", secondJoin));
 
   const activity = within(screen.getByLabelText("Room activity"));
   expect(activity.queryByText("Lin joined the room")).toBeNull();
+  expect(activity.queryByText("Ada left the room")).toBeNull();
   expect(activity.getByText("Max joined the room")).not.toBeNull();
-  expect(activity.getAllByRole("listitem")).toHaveLength(1);
+  expect(activity.getByText("Jo left the room")).not.toBeNull();
+  expect(activity.getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("clears notifications when switching rooms and ignores later old-room events", async () => {

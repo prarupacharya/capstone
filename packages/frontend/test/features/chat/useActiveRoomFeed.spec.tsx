@@ -60,7 +60,7 @@ test("filters notifications, clears the feed, and removes listeners on room chan
   expect(result.current.notifications).toHaveLength(1);
 });
 
-test("keeps the latest join announcement while preserving leave activity", () => {
+test("keeps the latest announcement of each type", () => {
   const fixture = socketFixture();
   const firstJoin: RoomNotification = {
     chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin",
@@ -70,14 +70,18 @@ test("keeps the latest join announcement while preserving leave activity", () =>
     chatroomId: "room-1", type: "user_left", userId: "user-3", identity: "Ada",
     message: "Ada left", createdAt: "2026-01-02"
   };
+  const secondLeft: RoomNotification = {
+    ...left, userId: "user-5", identity: "Jo", message: "Jo left", createdAt: "2026-01-03"
+  };
   const secondJoin: RoomNotification = {
-    ...firstJoin, userId: "user-4", identity: "Max", message: "Max joined", createdAt: "2026-01-03"
+    ...firstJoin, userId: "user-4", identity: "Max", message: "Max joined", createdAt: "2026-01-04"
   };
   const { result } = renderHook(() => useActiveRoomFeed(fixture.socket, true, "room-1"));
 
   act(() => fixture.trigger("roomNotification", firstJoin));
   act(() => fixture.trigger("roomNotification", left));
+  act(() => fixture.trigger("roomNotification", secondLeft));
   act(() => fixture.trigger("roomNotification", secondJoin));
 
-  expect(result.current.notifications).toEqual([left, secondJoin]);
+  expect(result.current.notifications).toEqual([secondLeft, secondJoin]);
 });
