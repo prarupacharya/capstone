@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AppLogger } from "../../common/logging/app-logger";
 import { AuthModule } from "../auth/auth.module";
 import { DatabaseModule } from "../database/database.module";
 import { ChatGateway } from "./chat.gateway";
@@ -14,6 +15,7 @@ import { WsJwtAuthService } from "./ws-jwt-auth.service";
   imports: [AuthModule, DatabaseModule],
   controllers: [ChatroomsController],
   providers: [
+    AppLogger,
     ChatGateway,
     ChatsRepository,
     ChatroomsRepository,
