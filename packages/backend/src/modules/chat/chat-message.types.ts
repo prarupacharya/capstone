@@ -1,6 +1,8 @@
 export interface ChatMessage {
   id: string;
   chatroomId: string;
+  senderId: string;
+  senderEmail: string;
   sender: string;
   message: string;
   createdAt: Date;
