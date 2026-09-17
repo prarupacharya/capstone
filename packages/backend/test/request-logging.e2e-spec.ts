@@ -32,6 +32,10 @@ describe("request logging", () => {
     }
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0])).toEqual(expect.objectContaining({
+      method: "POST",
+      path: "/health",
+      statusCode: 404,
+      durationMs: expect.any(Number),
       level: "WARN",
       message: "API request completed",
       correlationId: "request-from-test"

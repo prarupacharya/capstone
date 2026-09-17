@@ -60,6 +60,18 @@ describe("AppLogger", () => {
     expect(getRecords(output)[0]).toEqual(expect.objectContaining({ correlationId: "request-123" }));
   });
 
+  it("writes stdout records without touching the filesystem", () => {
+    logger.write("INFO", "API request completed", { method: "GET" });
+
+    expect(getRecords(output)[0]).toEqual(expect.objectContaining({
+      level: "INFO",
+      message: "API request completed",
+      method: "GET"
+    }));
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+  });
+
   it("sanitizes file methods and logs recoverable write failures", () => {
     logger.writeToFile("get/users", "INFO", "saved");
     expect(mkdir).toHaveBeenCalledWith(expect.stringMatching(/GET_USERS$/), { recursive: true });

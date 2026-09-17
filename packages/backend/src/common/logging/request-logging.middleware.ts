@@ -33,7 +33,7 @@ export class RequestLoggingMiddleware implements NestMiddleware {
 
       this.metrics.recordRequest(route, statusCode, durationMs);
 
-      this.logger.writeToFile(request.method, level, "API request completed", {
+      this.logger.write(level, "API request completed", {
         method: request.method,
         path: requestPath,
         statusCode,
