@@ -11,7 +11,11 @@ let socketPort: number;
 socketServer.on("connection", (socket) => {
   socket.on("joinRoom", (payload: { chatroomId?: string }, acknowledge: (response: unknown) => void) => {
     const chatroomId = payload.chatroomId ?? "";
-    acknowledge({ ok: true, data: { chatroomId, messages: [] } });
+    const messages = chatroomId === "room-1" ? [
+      { id: "message-1", chatroomId, senderId: "user-123", sender: "user@example.com", message: "My message", createdAt: "2026-01-01T12:00:00.000Z" },
+      { id: "message-2", chatroomId, senderId: "user-456", sender: "other@example.com", message: "Other message", createdAt: "2026-01-01T12:01:00.000Z" }
+    ] : [];
+    acknowledge({ ok: true, data: { chatroomId, messages } });
     setTimeout(() => socket.emit("roomUserCountUpdated", { chatroomId, numberOfUsers: 4 }), 100);
   });
   socket.on("leaveRoom", (payload: { chatroomId?: string }, acknowledge: (response: unknown) => void) => {
@@ -78,6 +82,12 @@ test("updates the visible room count from the socket without refetching", async 
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Chat messages" }).locator("li")).toHaveCount(2);
+  await expect(page.locator(".message-row--own")).toHaveCSS("justify-content", "flex-end");
+  await expect(page.locator(".message-row--own .message-bubble")).toHaveCSS("background-color", "rgb(220, 252, 231)");
+  await expect(page.locator(".message-row--other")).toHaveCSS("justify-content", "flex-start");
+  await expect(page.locator(".message-row--other .message-bubble")).toHaveCSS("background-color", "rgb(219, 234, 254)");
+  await expect(page.locator("ol.message-list")).toHaveCount(0);
   await page.getByRole("button", { name: /Support\s+1/ }).click();
   await page.getByRole("button", { name: "Join chatroom" }).click();
   await expect(page.getByRole("heading", { name: "Support" })).toBeVisible();

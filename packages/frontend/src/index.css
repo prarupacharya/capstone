@@ -187,6 +187,12 @@ main {
 .room-notification strong { display: block; color: #3730a3; }
 .room-notification p { margin: 0.2rem 0; }
 .room-notification time { font-size: 0.8rem; }
+.message-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+.message-row { display: flex; justify-content: flex-start; }
+.message-row--own { justify-content: flex-end; }
+.message-bubble { max-width: min(80%, 32rem); padding: 0.65rem 0.8rem; border-radius: 1rem 1rem 1rem 0.25rem; color: #1e3a8a; background: #dbeafe; overflow-wrap: anywhere; }
+.message-row--own .message-bubble { border-radius: 1rem 1rem 0.25rem 1rem; color: #14532d; background: #dcfce7; }
+.message-bubble p { margin: 0.2rem 0; color: inherit; }
 .message-composer { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .message-composer input { flex: 1; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font: inherit; }
 .message-composer button { padding: 0.7rem 1rem; border: 0; border-radius: 0.5rem; color: #fff; background: #4f46e5; font: inherit; }

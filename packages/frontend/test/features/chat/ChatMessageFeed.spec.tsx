@@ -32,3 +32,28 @@ test("renders messages and room activity with safe timestamps", () => {
   expect(times[0].textContent).toBe("not-a-date");
   expect(times[1].getAttribute("datetime")).toBe(message.createdAt);
 });
+
+test("classifies messages by sender ID and removes ordered-list counters", () => {
+  const ownMessage: ChatHistoryMessage = {
+    id: "own", chatroomId: "room-1", senderId: "user-1", sender: "Ada", message: "Mine",
+    createdAt: "2026-01-01T12:00:00.000Z"
+  };
+  const otherMessage: ChatHistoryMessage = {
+    id: "other", chatroomId: "room-1", senderId: "user-2", sender: "Lin", message: "Theirs",
+    createdAt: "2026-01-01T12:01:00.000Z"
+  };
+  const legacyMessage: ChatHistoryMessage = {
+    id: "legacy", chatroomId: "room-1", sender: "Pat", message: "Legacy",
+    createdAt: "2026-01-01T12:02:00.000Z"
+  };
+
+  render(<ChatMessageFeed messages={[ownMessage, otherMessage, legacyMessage]} notifications={[]} currentUserId="user-1" />);
+
+  const list = screen.getByRole("list", { name: "Chat messages" });
+  const items = within(list).getAllByRole("listitem");
+  expect(items[0].className).toContain("message-row--own");
+  expect(items[1].className).toContain("message-row--other");
+  expect(items[2].className).toContain("message-row--other");
+  expect(list.tagName).toBe("UL");
+  expect(within(list).queryByRole("list", { name: "Chat messages" })).toBeNull();
+});
