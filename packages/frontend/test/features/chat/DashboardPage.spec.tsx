@@ -326,6 +326,30 @@ test("renders room join and leave notifications in the activity list", async () 
   expect(screen.queryByText("No messages yet.")).not.toBeNull();
 });
 
+test("replaces the previous join announcement when another user joins", async () => {
+  const fixture = socketFixture();
+  const rooms: ChatroomSummary[] = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01", numberOfUsers: 2 }];
+  const firstJoin: RoomNotification = {
+    chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin",
+    message: "Lin joined the room", createdAt: "2026-01-01T12:01:00.000Z"
+  };
+  const secondJoin: RoomNotification = {
+    ...firstJoin, userId: "user-4", identity: "Max", message: "Max joined the room", createdAt: "2026-01-01T12:03:00.000Z"
+  };
+  render(<DashboardPage user={user} onLogout={jest.fn()} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
+
+  await act(async () => fixture.socket.connect());
+  await waitFor(() => expect(fixture.emit).toHaveBeenCalledTimes(1));
+  await act(async () => (fixture.emit.mock.calls[0][2] as (ack: JoinRoomAck) => void)({ ok: true, data: { chatroomId: "room-1", messages: [] } }));
+  await act(async () => fixture.trigger("roomNotification", firstJoin));
+  await act(async () => fixture.trigger("roomNotification", secondJoin));
+
+  const activity = within(screen.getByLabelText("Room activity"));
+  expect(activity.queryByText("Lin joined the room")).toBeNull();
+  expect(activity.getByText("Max joined the room")).not.toBeNull();
+  expect(activity.getAllByRole("listitem")).toHaveLength(1);
+});
+
 test("clears notifications when switching rooms and ignores later old-room events", async () => {
   const fixture = socketFixture();
   const rooms: ChatroomSummary[] = [

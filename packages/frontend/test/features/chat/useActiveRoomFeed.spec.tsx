@@ -59,3 +59,25 @@ test("filters notifications, clears the feed, and removes listeners on room chan
   act(() => fixture.trigger("roomNotification", { ...notification, chatroomId: "room-2" }));
   expect(result.current.notifications).toHaveLength(1);
 });
+
+test("keeps the latest join announcement while preserving leave activity", () => {
+  const fixture = socketFixture();
+  const firstJoin: RoomNotification = {
+    chatroomId: "room-1", type: "user_joined", userId: "user-2", identity: "Lin",
+    message: "Lin joined", createdAt: "2026-01-01"
+  };
+  const left: RoomNotification = {
+    chatroomId: "room-1", type: "user_left", userId: "user-3", identity: "Ada",
+    message: "Ada left", createdAt: "2026-01-02"
+  };
+  const secondJoin: RoomNotification = {
+    ...firstJoin, userId: "user-4", identity: "Max", message: "Max joined", createdAt: "2026-01-03"
+  };
+  const { result } = renderHook(() => useActiveRoomFeed(fixture.socket, true, "room-1"));
+
+  act(() => fixture.trigger("roomNotification", firstJoin));
+  act(() => fixture.trigger("roomNotification", left));
+  act(() => fixture.trigger("roomNotification", secondJoin));
+
+  expect(result.current.notifications).toEqual([left, secondJoin]);
+});

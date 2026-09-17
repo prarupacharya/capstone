@@ -26,12 +26,14 @@ test("renders messages and room activity with safe timestamps", () => {
   render(<ChatMessageFeed messages={[message]} notifications={[notification]} />);
 
   const feed = screen.getByLabelText("Messages");
+  const activity = screen.getByLabelText("Room activity");
   expect(within(feed).getByText("Welcome")).not.toBeNull();
   expect(within(feed).getByText("ada@example.com")).not.toBeNull();
-  expect(within(feed).getByText("Lin joined the room")).not.toBeNull();
-  const times = within(feed).getAllByRole("time");
-  expect(times[0].textContent).toBe("not-a-date");
-  expect(times[1].getAttribute("datetime")).toBe(message.createdAt);
+  expect(within(activity).getByText("Lin joined the room")).not.toBeNull();
+  expect(feed.contains(activity)).toBe(false);
+  expect(activity.previousElementSibling).toBe(feed);
+  expect(within(activity).getByRole("time").textContent).toBe("not-a-date");
+  expect(within(feed).getByRole("time").getAttribute("datetime")).toBe(message.createdAt);
 });
 
 test("classifies messages by sender ID and removes ordered-list counters", () => {
