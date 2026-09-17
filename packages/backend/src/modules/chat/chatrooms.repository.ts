@@ -25,6 +25,19 @@ function mapChatroom(row: ChatroomRow): Chatroom {
 export class ChatroomsRepository {
   constructor(private readonly databaseService: DatabaseService) {}
 
+  async createChatroom(chatroomName: string): Promise<Chatroom> {
+    const result = await this.databaseService.getPool().query<ChatroomRow>(
+      `
+        INSERT INTO chatrooms (chatroom_name)
+        VALUES ($1)
+        RETURNING id, chatroom_name, created_at
+      `,
+      [chatroomName]
+    );
+
+    return mapChatroom(result.rows[0]);
+  }
+
   async listChatrooms(): Promise<Chatroom[]> {
     const result = await this.databaseService.getPool().query<ChatroomRow>(
       `

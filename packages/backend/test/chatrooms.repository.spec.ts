@@ -22,6 +22,17 @@ const rows = [
 ];
 
 describe("ChatroomsRepository", () => {
+  it("creates a room with a parameterized name and maps the returned row", async () => {
+    const createdAt = new Date("2026-01-03T00:00:00.000Z");
+    const query = jest.fn().mockResolvedValue({ rows: [{ id: "room-3", chatroom_name: "Support", created_at: createdAt }] });
+    const repository = new ChatroomsRepository({ getPool: () => ({ query }) } as unknown as DatabaseService);
+
+    await expect(repository.createChatroom("Support")).resolves.toEqual({
+      id: "room-3", chatroomName: "Support", createdAt
+    });
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO chatrooms"), ["Support"]);
+  });
+
   it("lists and maps rooms, and finds a room by parameterized id", async () => {
     const query = jest.fn()
       .mockResolvedValueOnce({ rows })
