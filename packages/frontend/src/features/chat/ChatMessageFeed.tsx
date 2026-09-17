@@ -3,6 +3,7 @@ import type { ChatHistoryMessage, RoomNotification } from "../../realtime/chat-e
 export type ChatMessageFeedProps = {
   readonly messages: readonly ChatHistoryMessage[];
   readonly notifications: readonly RoomNotification[];
+  readonly currentUserId?: string;
 };
 
 function formatMessageTime(createdAt: string) {
@@ -10,7 +11,7 @@ function formatMessageTime(createdAt: string) {
   return Number.isNaN(date.getTime()) ? createdAt : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function ChatMessageFeed({ messages, notifications }: ChatMessageFeedProps) {
+export function ChatMessageFeed({ messages, notifications, currentUserId }: ChatMessageFeedProps) {
   return (
     <div className="message-region" aria-label="Messages" aria-live="polite">
       {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
@@ -21,12 +22,17 @@ export function ChatMessageFeed({ messages, notifications }: ChatMessageFeedProp
           <time dateTime={notification.createdAt}>{formatMessageTime(notification.createdAt)}</time>
         </li>)}
       </ul>}
-      {messages.length === 0 ? <p>No messages yet.</p> : <ol className="message-list">
-        {messages.map((message) => <li key={message.id}>
-          <strong>{message.sender}</strong><p>{message.message}</p>
-          <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+      {messages.length === 0 ? <p>No messages yet.</p> : <ul className="message-list" aria-label="Chat messages">
+        {messages.map((message) => <li
+          className={`message-row ${message.senderId !== undefined && message.senderId === currentUserId ? "message-row--own" : "message-row--other"}`}
+          key={message.id}
+        >
+          <div className="message-bubble">
+            <strong>{message.sender}</strong><p>{message.message}</p>
+            <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+          </div>
         </li>)}
-      </ol>}
+      </ul>}
     </div>
   );
 }

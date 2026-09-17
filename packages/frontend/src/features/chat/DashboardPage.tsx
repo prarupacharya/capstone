@@ -68,7 +68,7 @@ export function DashboardPage({
             >{leaving ? "Leaving..." : "Leave chatroom"}</button>}
           </div>
           {roomError && <p role="alert">{roomError}</p>}
-          <ChatMessageFeed messages={messages} notifications={notifications} />
+          <ChatMessageFeed messages={messages} notifications={notifications} currentUserId={user.id} />
           {sendError && <p role="alert">{sendError}</p>}
           <MessageComposer
             draft={draft} sending={sending} active={Boolean(activeRoomId)}
