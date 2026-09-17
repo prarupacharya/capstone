@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ChatHistoryMessage, RoomNotification } from "../../realtime/chat-events.types.js";
 
 export type ChatMessageFeedProps = {
@@ -12,8 +13,15 @@ function formatMessageTime(createdAt: string) {
 }
 
 export function ChatMessageFeed({ messages, notifications, currentUserId }: ChatMessageFeedProps) {
+  const messageRegionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const messageRegion = messageRegionRef.current;
+    if (messageRegion) messageRegion.scrollTop = messageRegion.scrollHeight;
+  }, [messages, notifications]);
+
   return (
-    <div className="message-region" aria-label="Messages" aria-live="polite">
+    <div ref={messageRegionRef} className="message-region" aria-label="Messages" aria-live="polite">
       {notifications.length > 0 && <ul className="room-notification-list" aria-label="Room activity">
         {notifications.map((notification, index) => <li
           className="room-notification" key={`${notification.type}-${notification.userId}-${notification.createdAt}-${index}`}
