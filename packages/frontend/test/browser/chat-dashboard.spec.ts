@@ -14,7 +14,10 @@ socketServer.on("connection", (socket) => {
     const messages = chatroomId === "room-1" ? [
       { id: "message-1", chatroomId, senderId: "user-123", senderEmail: "user@example.com", sender: "User", message: "My message", createdAt: "2026-01-01T12:00:00.000Z" },
       { id: "message-2", chatroomId, senderId: "user-456", senderEmail: "other@example.com", sender: "Other", message: "Other message", createdAt: "2026-01-01T12:01:00.000Z" }
-    ] : [];
+    ] : chatroomId === "scroll-room" ? Array.from({ length: 40 }, (_, index) => ({
+      id: `scroll-message-${index}`, chatroomId, senderId: "user-123", sender: "User",
+      message: `Scroll message ${index}`, createdAt: `2026-01-01T12:${String(index).padStart(2, "0")}:00.000Z`
+    })) : [];
     acknowledge({ ok: true, data: { chatroomId, messages } });
     setTimeout(() => socket.emit("roomUserCountUpdated", { chatroomId, numberOfUsers: 4 }), 100);
   });
@@ -112,4 +115,50 @@ test("updates the visible room count from the socket without refetching", async 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
   expect(catalogRequests).toBe(1);
+});
+
+test("scrolls a long message history inside the message region", async ({ page }) => {
+  await page.addInitScript((port) => {
+    const rewriteSocketUrl = (value: string) => value.replace("localhost:3000", `127.0.0.1:${port}`);
+    const open = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      return open.call(this, method, rewriteSocketUrl(String(url)), ...rest);
+    };
+    const NativeWebSocket = window.WebSocket;
+    window.WebSocket = class extends NativeWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(rewriteSocketUrl(String(url)), protocols);
+      }
+    } as typeof WebSocket;
+  }, socketPort);
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("capstone.accessToken", "header.payload.signature");
+  });
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      id: "user-123", email: "user@example.com", userType: "generaluser"
+    }) });
+  });
+  await page.route("**/chatrooms", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([
+      { id: "scroll-room", chatroomName: "Scroll room", createdAt: "2026-01-01", numberOfUsers: 1, isMember: true }
+    ]) });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Scroll room" })).toBeVisible();
+  const feed = page.locator(".message-region").first();
+  const dimensions = await feed.evaluate((element) => ({
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    scrollTop: element.scrollTop
+  }));
+  expect(dimensions.overflowY).toBe("auto");
+  expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+  expect(dimensions.scrollTop).toBe(dimensions.scrollHeight - dimensions.clientHeight);
+  await feed.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await feed.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByRole("heading", { name: "Scroll room" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 });
