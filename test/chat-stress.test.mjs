@@ -10,7 +10,9 @@ const { Server } = requireBackend("socket.io");
 const generalId = "11111111-1111-4111-8111-111111111111";
 const users = new Map();
 const messages = [];
+const leftUsers = new Set();
 let rejectNextSend = false;
+let rejectNextLeave = false;
 let httpServer;
 let socketServer;
 let baseUrl;
@@ -71,6 +73,17 @@ before(async () => {
       socket.emit("newMessage", saved);
       ack({ ok: true, data: saved });
     });
+    socket.on("leaveRoom", async (payload, ack) => {
+      if (payload.chatroomId !== generalId) return ack({ ok: false, error: { code: "ROOM_NOT_FOUND" } });
+      if (!socket.rooms.has(`chatroom:${generalId}`)) return ack({ ok: false, error: { code: "NOT_MEMBER" } });
+      if (rejectNextLeave) {
+        rejectNextLeave = false;
+        return ack({ ok: false, error: { code: "LEAVE_FAILED" } });
+      }
+      await socket.leave(`chatroom:${generalId}`);
+      leftUsers.add(socket.data.email);
+      ack({ ok: true, data: { chatroomId: generalId } });
+    });
   });
   await new Promise((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${httpServer.address().port}`;
@@ -80,22 +93,37 @@ after(async () => {
   await new Promise((resolve) => socketServer.close(resolve));
 });
 
-test("concurrent users register, log in, join General, and send once", async () => {
+test("concurrent users register, log in, join General, send once, and leave", async () => {
   const summary = await runStress(parseOptions(["--url", baseUrl, "--users", "4", "--concurrency", "2"]));
   assert.equal(summary.requestedUsers, 4);
   assert.equal(summary.completedUsers, 4);
   assert.equal(summary.failedUsers, 0);
   assert.equal(summary.peakOpenSockets, 4);
   assert.equal(summary.stages.send.passed, 4);
+  assert.equal(summary.stages.leave.passed, 4);
   assert.equal(messages.length, 4);
   assert.equal(new Set(messages.map((message) => message.senderEmail)).size, 4);
+  assert.equal(leftUsers.size, 4);
 });
 
 test("a failed send appears in the summary", async () => {
   rejectNextSend = true;
+  const previousLeaves = leftUsers.size;
   const summary = await runStress(parseOptions(["--url", baseUrl, "--users", "1"]));
   assert.equal(summary.completedUsers, 0);
   assert.equal(summary.failedUsers, 1);
   assert.equal(summary.stages.send.failed, 1);
+  assert.equal(summary.stages.leave.passed, 1);
   assert.equal(summary.failureExamples[0].stage, "send");
+  assert.equal(leftUsers.size, previousLeaves + 1);
+});
+
+test("a failed leave appears in the summary", async () => {
+  rejectNextLeave = true;
+  const summary = await runStress(parseOptions(["--url", baseUrl, "--users", "1"]));
+  assert.equal(summary.completedUsers, 0);
+  assert.equal(summary.failedUsers, 1);
+  assert.equal(summary.stages.send.passed, 1);
+  assert.equal(summary.stages.leave.failed, 1);
+  assert.equal(summary.failureExamples[0].stage, "leave");
 });
