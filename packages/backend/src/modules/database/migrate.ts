@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { loadBackendEnvFile } from "../../config/load-env";
 import { getDatabasePoolConfig, parseDatabaseConfig } from "./database.config";
 import { runUsersMigration } from "./migrations/001-create-users";
 import { runChatSchemaMigration } from "./migrations/002-create-chat-schema";
@@ -17,6 +18,7 @@ export async function migrate() {
 }
 
 if (require.main === module) {
+  loadBackendEnvFile();
   void migrate().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

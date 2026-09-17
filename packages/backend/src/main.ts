@@ -1,16 +1,14 @@
 import "reflect-metadata";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { useContainer } from "class-validator";
 import { AppModule } from "./app.module";
 import { parseBackendEnv, type BackendConfig } from "./config/env";
+import { loadBackendEnvFile } from "./config/load-env";
 import { AppLogger } from "./common/logging/app-logger";
 
-const envPath = resolve(__dirname, "../.env");
-if (existsSync(envPath)) process.loadEnvFile(envPath);
+loadBackendEnvFile();
 
 export function configureApp(app: Pick<INestApplication, "enableCors">, config: BackendConfig) {
   app.enableCors({ origin: config.corsOrigins });
