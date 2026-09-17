@@ -42,11 +42,11 @@ describe("RequestLoggingMiddleware", () => {
 
     expect(response.setHeader).toHaveBeenCalledWith("X-Correlation-ID", "request-123");
     expect(next).toHaveBeenCalledTimes(1);
-    expect(logger.write).toHaveBeenCalledTimes(1);
-    expect(logger.writeToFile).not.toHaveBeenCalled();
+    expect(logger.writeToFile).toHaveBeenCalledTimes(1);
+    expect(logger.write).not.toHaveBeenCalled();
     expect(metrics.recordRequest).toHaveBeenCalledTimes(1);
     expect(metrics.recordRequest).toHaveBeenCalledWith("/health", 200, expect.any(Number));
-    expect(logger.write).toHaveBeenCalledWith("INFO", "API request completed", expect.objectContaining({ path: "/health", statusCode: 200, correlationId: "request-123" }));
+    expect(logger.writeToFile).toHaveBeenCalledWith("GET", "INFO", "API request completed", expect.objectContaining({ path: "/health", statusCode: 200, correlationId: "request-123" }));
   });
 
   it("propagates the request ID to downstream work", () => {
@@ -65,7 +65,7 @@ describe("RequestLoggingMiddleware", () => {
     const generatedId = (response.setHeader as jest.Mock).mock.calls[0][1];
     expect(generatedId).toMatch(/^[a-f0-9-]{36}$/);
     expect(metrics.recordRequest).toHaveBeenCalledWith("/fallback", statusCode, expect.any(Number));
-    expect(logger.write).toHaveBeenCalledWith(level, "API request completed", expect.objectContaining({ path: "/fallback", statusCode }));
-    expect(logger.writeToFile).not.toHaveBeenCalled();
+    expect(logger.writeToFile).toHaveBeenCalledWith("GET", level, "API request completed", expect.objectContaining({ path: "/fallback", statusCode }));
+    expect(logger.write).not.toHaveBeenCalled();
   });
 });
