@@ -1,4 +1,4 @@
-# Use Socket.IO WebSockets for authenticated real-time chat
+# ADR 0005: LF-Chat architecture and real-time communication
 
 Date: 2026-09-15
 
@@ -8,40 +8,61 @@ Accepted
 
 ## Context
 
-The project is a full-stack, room-based chat application built as an npm monorepo. The React and Vite frontend supports registration, login, room discovery, room membership, message history, and live conversations. The NestJS backend owns authentication, validation, authorization, persistence, health checks, metrics, and message distribution. PostgreSQL stores users, chat rooms, memberships, and chat messages, while Docker Compose and GitHub Actions provide consistent local and automated environments.
+LF-Chat needs secure accounts, persistent chatrooms and messages, live updates, and a way to recover after disconnection. These are the main architecture choices in the current application.
 
-Chat delivery has different requirements from the project's request-and-response operations. Registration, login, room discovery, health checks, and metrics fit HTTP because a client initiates each operation and expects one response. Active conversations require a long-lived, bidirectional channel: clients must send room commands and messages while receiving new messages, presence notifications, and room user-count updates immediately without repeatedly requesting the same data.
+## Decisions
 
-The communication strategy must:
+### 1. Separate the frontend, backend, and database work
 
-- authenticate every live connection with the same JWT identity model used by the HTTP API;
-- isolate broadcasts so that a room receives only its own messages;
-- support `joinRoom`, `leaveRoom`, and `sendMessage` commands with explicit acknowledgements and errors;
-- persist a valid message before publishing it, so clients do not display messages that the system failed to store;
-- reconnect after temporary network interruptions and clean up transient presence on disconnect;
-- integrate with the existing NestJS and React applications and remain testable in CI and Docker Compose; and
-- provide sufficiently low latency without unnecessary polling traffic.
+**Decision:** Use a private npm workspace with a React/Vite frontend and a NestJS backend. Backend controllers and the socket gateway handle requests and events; services coordinate behavior; repositories handle SQL. Frontend hooks separately manage the room list, socket, active room, feed, counts, and composer.
 
-The main alternatives considered were short or long polling, Server-Sent Events (SSE), raw WebSockets, and Socket.IO over WebSockets. Polling is simple and universally understood, but it adds repeated HTTP and database work, introduces polling-delay latency, and becomes increasingly inefficient as the number of rooms and connected users grows. Long polling reduces empty responses but still requires repeated connection turnover and custom retry and ordering behavior. SSE provides efficient server-to-client updates but is one-way, so room commands and outgoing messages would still require a separate HTTP path. Raw WebSockets provide bidirectional communication with minimal protocol overhead, but would require the project to implement reconnection, acknowledgements, event routing, room membership, and transport edge cases itself.
+**Why:** Each part has one clear responsibility. Chat behavior can be tested without a full browser or live socket, and root scripts can check both packages together.
 
-## Decision
+### 2. Use HTTP for ordinary requests and Socket.IO for live chat
 
-Use Socket.IO's WebSocket-based, bidirectional event model for real-time chat, implemented through a NestJS Gateway on the backend and `socket.io-client` on the React frontend. Keep HTTP for registration, login, chat-room discovery, health, and metrics; use the Socket.IO connection only for live room participation and messaging.
+**Decision:** HTTP handles registration, login, session checks, room listing and creation, health, and metrics. Socket.IO handles `joinRoom`, `leaveRoom`, and `sendMessage` with success or error acknowledgements. It delivers `newMessage`, `roomNotification`, and `roomUserCountUpdated` events. Each chatroom maps to a Socket.IO room. The browser allows Socket.IO to start with polling and upgrade to WebSocket.
 
-The client supplies its access token in the Socket.IO handshake. The gateway verifies the JWT before accepting the connection and stores the authenticated user identity on the socket. Unauthenticated connections are rejected. The gateway validates each event payload and returns a structured acknowledgement for success or failure.
+**Why:** Account and catalog requests need one response; chat needs two-way, room-specific updates. Short polling adds repeated requests and delivery delay. Long polling still needs repeated connections and retry logic. SSE is one-way. Raw WebSockets would require us to build room routing, acknowledgements, and reconnection. Socket.IO provides those behaviors.
 
-Each chat room maps to a Socket.IO room. A client must successfully emit `joinRoom` before it can send messages to that room. Joining verifies that the room exists, records membership, attaches the socket to the Socket.IO room, and returns recent message history. `leaveRoom` ends the membership and detaches all relevant sockets for that user. Disconnect handling removes transient in-memory presence.
+### 3. Authenticate HTTP and sockets separately
 
-For `sendMessage`, the server verifies the room, confirms that the authenticated socket is currently present, trims and validates the message, and limits it to 2,000 characters. The message is written to PostgreSQL before the gateway broadcasts `newMessage` to that room. The gateway also emits room presence notifications and user-count updates. The frontend owns connection lifecycle state, enables Socket.IO reconnection, subscribes to server events, and removes listeners when the React component lifecycle ends.
+**Decision:** A global JWT guard protects private HTTP routes; registration and login are public. Registration hashes passwords and returns no token. Login checks bcrypt hashes and issues a short-lived JWT. The browser keeps the token in tab `sessionStorage` and checks it with `GET /auth/me` on reload. The Socket.IO handshake verifies the JWT before connecting. Each room command then validates its input and room access. HTTP DTO validation transforms input and rejects unknown fields.
 
-The initial deployment uses one backend instance and in-memory live-presence tracking. Persistent application data remains in PostgreSQL. If the backend is scaled horizontally, a shared Socket.IO adapter and distributed presence mechanism, such as Redis, must be introduced so room broadcasts and presence remain consistent across instances.
+**Why:** An HTTP guard cannot protect a socket connection. Both the connection and each command need checks before a user joins or sends to a room. Checking `/auth/me` on reload also prevents the browser from trusting a stored but invalid token.
+
+### 4. Keep durable state in PostgreSQL
+
+**Decision:** PostgreSQL stores users, rooms, membership history, and messages. The backend uses one connection pool and runs migrations on startup. Database constraints enforce unique emails and room names regardless of case, one active membership per user and room, and valid message length. Membership changes use transactions and conflict-safe inserts. Room lists calculate the caller's membership and count active membership rows.
+
+**Why:** This data must survive a socket disconnect or process restart. Database constraints protect against concurrent requests that application validation alone cannot safely handle. Membership rows record join and leave history. Room counts include offline members because they count memberships, not connected sockets.
+
+### 5. Keep membership separate from socket presence
+
+**Decision:** `joinRoom` checks the room, opens a membership if needed, joins the socket to the Socket.IO room, records it in `RoomPresenceService`, and returns recent messages. Joining again does not create a second active membership or notice. Explicit `leaveRoom` closes the membership, removes that user's known sockets from the room, and sends a notice and updated count. Disconnect only clears socket presence. Selecting another room does not leave the first one.
+
+**Why:** A refresh or network failure should not remove someone from a room. The user can reconnect without creating another membership or increasing the count. Notices describe explicit membership changes; counts come from PostgreSQL.
+
+### 6. Save a message before broadcasting it
+
+**Decision:** `sendMessage` requires the sender's current socket to have joined the target room. The gateway validates the room and trimmed message (1–2,000 characters), saves it, then broadcasts the saved record to that room, including the sender. If saving fails, it returns an error acknowledgement and sends nothing. `joinRoom` returns the latest 50 saved messages, ordered for display.
+
+**Why:** Clients should not see a message that failed to persist. Checking the exact socket prevents another socket with the same user account from sending into a room it has not joined. The 50-message limit gives reconnecting clients recent history without loading every message.
+
+### 7. Restore the browser view from the server
+
+**Decision:** The frontend keeps its room list, connection, selection, feed, and draft as separate state. A new room join requires confirmation and a successful acknowledgement. After reconnect, the selected room is joined again and its saved history replaces the visible feed. Disconnect clears the feed and blocks sending. The feed accepts events only for the selected room and ignores repeated message IDs. A newly created room is added to the creator's local list.
+
+**Why:** PostgreSQL owns messages and membership; the browser holds a temporary view. Rejoining rebuilds that view after a connection break instead of assuming its old state is still current.
+
+### 8. Expose logs, metrics, and health
+
+**Decision:** HTTP middleware accepts or creates a safe `X-Correlation-ID`, returns it to the caller, and writes structured JSON logs. The gateway logs connections, rejections, disconnects, and command results. Public `/metrics` reports HTTP request counts, errors, and duration. Public `/health` checks backend status and runs PostgreSQL `SELECT 1`.
+
+**Why:** These signals help trace failed requests, inspect socket outcomes, and check whether the database is reachable.
 
 ## Consequences
 
-Users receive messages and room updates immediately through one long-lived connection, and clients do not generate continuous polling traffic. Socket.IO rooms provide a direct boundary for room-specific broadcasts, while event acknowledgements give the UI a consistent way to handle validation, authorization, and persistence failures. Reusing JWTs keeps HTTP and WebSocket identity consistent. Persisting before broadcasting makes PostgreSQL the durable source of truth and allows a joining or reconnecting client to recover recent history.
-
-The system now maintains connection state in addition to ordinary HTTP request state. The frontend and backend must handle reconnects, duplicate lifecycle events, stale tokens, disconnect cleanup, and temporary loss of service. Automated tests must cover handshake authentication, room isolation, membership rules, message validation, persistence ordering, acknowledgements, and reconnection behavior.
-
-Socket.IO adds client and server dependencies and a small protocol overhead compared with raw WebSockets. Clients must use a compatible Socket.IO protocol rather than an arbitrary WebSocket client. Infrastructure must also support connection upgrades, long-lived connections, suitable timeouts, and sticky sessions or a shared adapter when multiple backend replicas are used.
-
-The current in-memory presence model is intentionally limited to a single backend instance and is not durable across restarts. This is acceptable for the present capstone deployment, but horizontal scaling requires Redis-backed fan-out and shared presence before adding replicas. Operational monitoring must continue to use structured logs with correlation information, the `/health` database check, and `/metrics`; WebSocket-specific connection, event, error, and latency metrics should be added as production load and reliability requirements increase.
+- Users receive room-specific messages and membership updates without repeatedly requesting them. Command acknowledgements let the browser show success or failure.
+- Messages and memberships survive disconnects and restarts. Reconnecting sockets must join their selected room again and reload recent history; offline members still count as room members.
+- A message is delivered only after PostgreSQL saves it. If the database write fails, the sender gets an error and no room broadcast occurs.
+- The live connection adds reconnect and socket authorization paths that need their own tests and monitoring alongside the HTTP API.
