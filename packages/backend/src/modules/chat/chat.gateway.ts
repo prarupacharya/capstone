@@ -7,6 +7,7 @@ import {
   WebSocketGateway
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
+import { AppLogger, type LogLevel } from "../../common/logging/app-logger";
 import { ChatroomsRepository } from "./chatrooms.repository";
 import type { WsAuthenticatedUser } from "./ws-jwt-auth.service";
 import type {
@@ -32,7 +33,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     private readonly chatroomsRepository: ChatroomsRepository,
     private readonly chatsRepository: ChatsRepository,
     private readonly roomPresenceService: RoomPresenceService,
-    private readonly userChatroomsRepository: UserChatroomsRepository
+    private readonly userChatroomsRepository: UserChatroomsRepository,
+    private readonly logger: AppLogger
   ) {}
 
   afterInit(server: Server) {
@@ -48,17 +50,17 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     @MessageBody() payload: unknown
   ): Promise<ChatEventAck<JoinRoomData>> {
     const user = (socket.data as { user?: WsAuthenticatedUser }).user;
-    if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
+    if (!user) return this.commandFailure(socket, "joinRoom", "UNAUTHORIZED", "Unauthorized");
 
     const chatroomId = this.getChatroomId(payload);
-    if (!chatroomId) return this.failure("INVALID_PAYLOAD", "A valid chatroomId is required");
+    if (!chatroomId) return this.commandFailure(socket, "joinRoom", "INVALID_PAYLOAD", "A valid chatroomId is required");
 
     let socketJoined = false;
     let presenceJoined = false;
     let membershipOpened = false;
     try {
       if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
-        return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
+        return this.commandFailure(socket, "joinRoom", "ROOM_NOT_FOUND", "Chatroom not found", chatroomId);
       }
       membershipOpened = await this.userChatroomsRepository.beginMembership(user.id, chatroomId);
       if (this.roomPresenceService.hasSocket(chatroomId, user.id, socket.id)) {
@@ -69,7 +71,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
             socket, chatroomId, user, "user_joined", `${user.email} joined the room`, numberOfUsers
           );
         }
-        return { ok: true, data: { chatroomId, messages } };
+        return this.commandSuccess(socket, "joinRoom", { chatroomId, messages });
       }
 
       await socket.join(getChatroomSocketRoom(chatroomId));
@@ -84,12 +86,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
           socket, chatroomId, user, "user_joined", `${user.email} joined the room`, numberOfUsers
         );
       }
-      return { ok: true, data: { chatroomId, messages } };
+      return this.commandSuccess(socket, "joinRoom", { chatroomId, messages });
     } catch {
       if (membershipOpened) await this.userChatroomsRepository.endMembership(user.id, chatroomId);
       if (presenceJoined) this.roomPresenceService.leave(chatroomId, user.id, socket.id);
       if (socketJoined) await socket.leave(getChatroomSocketRoom(chatroomId));
-      return this.failure("JOIN_FAILED", "Chatroom could not be joined");
+      return this.commandFailure(socket, "joinRoom", "JOIN_FAILED", "Chatroom could not be joined", chatroomId);
     }
   }
 
@@ -99,18 +101,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     @MessageBody() payload: unknown
   ): Promise<ChatEventAck<{ chatroomId: string }>> {
     const user = (socket.data as { user?: WsAuthenticatedUser }).user;
-    if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
+    if (!user) return this.commandFailure(socket, "leaveRoom", "UNAUTHORIZED", "Unauthorized");
 
     const chatroomId = this.getChatroomId(payload);
-    if (!chatroomId) return this.failure("INVALID_PAYLOAD", "A valid chatroomId is required");
+    if (!chatroomId) return this.commandFailure(socket, "leaveRoom", "INVALID_PAYLOAD", "A valid chatroomId is required");
 
     try {
       if (!await this.chatroomsRepository.findChatroomById(chatroomId)) {
-        return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
+        return this.commandFailure(socket, "leaveRoom", "ROOM_NOT_FOUND", "Chatroom not found", chatroomId);
       }
       const membershipEnded = await this.userChatroomsRepository.endMembership(user.id, chatroomId);
       if (!membershipEnded) {
-        return this.failure("NOT_MEMBER", "User is not a room member");
+        return this.commandFailure(socket, "leaveRoom", "NOT_MEMBER", "User is not a room member", chatroomId);
       }
 
       const detachedSocketIds = this.roomPresenceService.detachUserFromRoom(chatroomId, user.id);
@@ -125,9 +127,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
         socket, chatroomId, user, "user_left", `${user.email} left the room`, numberOfUsers
       );
 
-      return { ok: true, data: { chatroomId } };
+      return this.commandSuccess(socket, "leaveRoom", { chatroomId });
     } catch {
-      return this.failure("LEAVE_FAILED", "Chatroom could not be left");
+      return this.commandFailure(socket, "leaveRoom", "LEAVE_FAILED", "Chatroom could not be left", chatroomId);
     }
   }
 
@@ -137,17 +139,17 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
     @MessageBody() payload: unknown
   ): Promise<ChatEventAck<ChatMessage>> {
     const user = (socket.data as { user?: WsAuthenticatedUser }).user;
-    if (!user) return this.failure("UNAUTHORIZED", "Unauthorized");
+    if (!user) return this.commandFailure(socket, "sendMessage", "UNAUTHORIZED", "Unauthorized");
 
     const input = this.getSendMessagePayload(payload);
-    if (!input) return this.failure("INVALID_PAYLOAD", "A valid message is required");
+    if (!input) return this.commandFailure(socket, "sendMessage", "INVALID_PAYLOAD", "A valid message is required");
 
     try {
       if (!await this.chatroomsRepository.findChatroomById(input.chatroomId)) {
-        return this.failure("ROOM_NOT_FOUND", "Chatroom not found");
+        return this.commandFailure(socket, "sendMessage", "ROOM_NOT_FOUND", "Chatroom not found", input.chatroomId);
       }
       if (!this.roomPresenceService.hasSocket(input.chatroomId, user.id, socket.id)) {
-        return this.failure("NOT_MEMBER", "Socket is not a room member");
+        return this.commandFailure(socket, "sendMessage", "NOT_MEMBER", "Socket is not a room member", input.chatroomId);
       }
 
       const saved = await this.chatsRepository.saveMessage({
@@ -156,22 +158,40 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
         message: input.message
       });
       this.server.to(getChatroomSocketRoom(input.chatroomId)).emit("newMessage", saved);
-      return { ok: true, data: saved };
+      return this.commandSuccess(socket, "sendMessage", saved);
     } catch {
-      return this.failure("MESSAGE_FAILED", "Message could not be sent");
+      return this.commandFailure(socket, "sendMessage", "MESSAGE_FAILED", "Message could not be sent", input.chatroomId);
     }
   }
 
   handleDisconnect(socket: Socket) {
     this.roomPresenceService.disconnect(socket.id);
+    this.writeSocketLog("INFO", "WebSocket disconnected", {
+      event: "disconnect",
+      outcome: "completed",
+      socketId: socket.id,
+      ...this.getUserMetadata(socket)
+    });
   }
 
   private async authenticateSocket(socket: Socket, next: (error?: Error) => void) {
     try {
       const user = await this.wsJwtAuthService.authenticate(socket.handshake.auth?.token);
       socket.data.user = user;
+      this.writeSocketLog("INFO", "WebSocket connection accepted", {
+        event: "connection",
+        outcome: "accepted",
+        socketId: socket.id,
+        userId: user.id
+      });
       next();
     } catch {
+      this.writeSocketLog("WARN", "WebSocket connection rejected", {
+        event: "connection",
+        outcome: "rejected",
+        socketId: socket.id,
+        errorCode: "UNAUTHORIZED"
+      });
       next(new Error("Unauthorized"));
     }
   }
@@ -197,8 +217,54 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
       : null;
   }
 
-  private failure(code: string, message: string): ChatEventAck<never> {
+  private commandSuccess<T>(socket: Socket, event: string, data: T): ChatEventAck<T> {
+    this.logCommand(socket, event, "INFO", "success", undefined, this.getChatroomId(data));
+    return { ok: true, data };
+  }
+
+  private commandFailure(
+    socket: Socket,
+    event: string,
+    code: string,
+    message: string,
+    chatroomId?: string
+  ): ChatEventAck<never> {
+    this.logCommand(
+      socket,
+      event,
+      code.endsWith("_FAILED") ? "ERROR" : "WARN",
+      "failure",
+      code,
+      chatroomId
+    );
     return { ok: false, error: { code, message } };
+  }
+
+  private logCommand(
+    socket: Socket,
+    event: string,
+    level: LogLevel,
+    outcome: "success" | "failure",
+    errorCode?: string,
+    chatroomId?: string | null
+  ) {
+    this.writeSocketLog(level, `WebSocket ${event} ${outcome}`, {
+      event,
+      outcome,
+      socketId: socket.id,
+      ...this.getUserMetadata(socket),
+      ...(chatroomId ? { chatroomId } : {}),
+      ...(errorCode ? { errorCode } : {})
+    });
+  }
+
+  private getUserMetadata(socket: Socket) {
+    const user = (socket.data as { user?: WsAuthenticatedUser }).user;
+    return user ? { userId: user.id } : {};
+  }
+
+  private writeSocketLog(level: LogLevel, message: string, metadata: Record<string, unknown>) {
+    this.logger.writeToFile("WEBSOCKET", level, message, metadata);
   }
 
   private emitPresenceEvent(
