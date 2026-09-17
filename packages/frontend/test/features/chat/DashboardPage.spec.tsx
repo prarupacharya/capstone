@@ -33,7 +33,7 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
     { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02", numberOfUsers: 1 }
   ];
   const generalMessage: ChatHistoryMessage = {
-    id: "message-1", chatroomId: "room-1", sender: "Ada", message: "Welcome", createdAt: "2026-01-01T12:00:00.000Z"
+    id: "message-1", chatroomId: "room-1", senderId: user.id, sender: "Ada", message: "Welcome", createdAt: "2026-01-01T12:00:00.000Z"
   };
 
   render(<DashboardPage user={user} onLogout={onLogout} loadChatrooms={async () => rooms} createSocket={() => fixture.socket} />);
@@ -46,6 +46,7 @@ test("loads rooms, renders the chat frame, and selects a room", async () => {
   expect(screen.getByRole("heading", { name: "General" })).not.toBeNull();
   expect(screen.getByText("Ada")).not.toBeNull();
   expect(screen.getByText("Welcome")).not.toBeNull();
+  expect(screen.getByText("Welcome").closest("li")?.className).toContain("message-row--own");
   expect(screen.getByRole("time").getAttribute("datetime")).toBe(generalMessage.createdAt);
   expect(screen.getByRole("textbox", { name: "Message" })).not.toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /Support\s+1/ }));
