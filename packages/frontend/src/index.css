@@ -167,6 +167,11 @@ main {
 .dashboard-layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); gap: 1rem; min-height: 28rem; }
 .room-sidebar, .chat-panel { padding: 1.25rem; border: 1px solid #e2e8f0; border-radius: 1rem; background: #fff; }
 .room-sidebar h2, .chat-panel h2 { margin-top: 0; }
+.create-room-form { display: grid; gap: 0.45rem; margin-bottom: 1rem; }
+.create-room-form input { box-sizing: border-box; width: 100%; padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font: inherit; }
+.create-room-form button { padding: 0.6rem; border: 0; border-radius: 0.5rem; color: #fff; background: #4f46e5; cursor: pointer; font: inherit; font-weight: 700; }
+.create-room-form button:disabled { cursor: wait; opacity: 0.65; }
+.create-room-form [role="alert"] { margin: 0; color: #b91c1c; font-size: 0.85rem; }
 .room-list { display: grid; gap: 0.5rem; padding: 0; list-style: none; }
 .room-button { display: flex; justify-content: space-between; width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; background: #fff; cursor: pointer; font: inherit; text-align: left; }
 .room-button[aria-pressed="true"] { border-color: #4f46e5; background: #eef2ff; }

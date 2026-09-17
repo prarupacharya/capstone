@@ -56,6 +56,10 @@ export function useChatroomCatalog(loadChatrooms: ChatroomLoader) {
     room.id === roomId ? { ...room, isMember: false } : room
   ));
   const clearSelection = () => setSelectedId(undefined);
+  const addRoom = (room: ChatroomSummary) => setRooms((current) => {
+    if (current.some((existing) => existing.id === room.id)) return current;
+    return [...current, room].sort((left, right) => left.chatroomName.localeCompare(right.chatroomName));
+  });
   const updateRoomUserCount = (roomId: string, numberOfUsers: number) => setRooms((current) => current.map((room) =>
     room.id === roomId ? { ...room, numberOfUsers } : room
   ));
@@ -63,6 +67,6 @@ export function useChatroomCatalog(loadChatrooms: ChatroomLoader) {
   return {
     rooms, selectedId, selectedRoom, pendingRoom, status, joinRequestId,
     selectRoom, confirmJoin, cancelJoin, clearJoinRequest, markJoined, markLeft,
-    clearSelection, updateRoomUserCount
+    clearSelection, addRoom, updateRoomUserCount
   };
 }

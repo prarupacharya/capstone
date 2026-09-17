@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const requestMock = jest.fn<(path: string, init?: RequestInit, options?: { authenticated?: boolean }) => Promise<Response>>();
 jest.unstable_mockModule(fileURLToPath(new URL("../../src/api/client.ts", import.meta.url)), () => ({ request: requestMock }));
-const { listChatrooms } = await import("../../src/api/chatrooms.js");
+const { createChatroom, listChatrooms } = await import("../../src/api/chatrooms.js");
 
 test("lists chatrooms through the authenticated API", async () => {
   const rooms = [{ id: "room-1", chatroomName: "General", createdAt: "2026-01-01T00:00:00.000Z", numberOfUsers: 2 }];
@@ -13,6 +13,19 @@ test("lists chatrooms through the authenticated API", async () => {
 
   await expect(listChatrooms()).resolves.toEqual(rooms);
   expect(requestMock).toHaveBeenCalledWith("/chatrooms", undefined, { authenticated: true });
+});
+
+test("creates a chatroom through the authenticated API", async () => {
+  const room = { id: "room-2", chatroomName: "Support", createdAt: "2026-01-02T00:00:00.000Z", numberOfUsers: 0, isMember: false };
+  const json = jest.fn<() => Promise<unknown>>().mockResolvedValue(room);
+  requestMock.mockResolvedValue({ json } as unknown as Response);
+
+  await expect(createChatroom({ chatroomName: "Support" })).resolves.toEqual(room);
+  expect(requestMock).toHaveBeenCalledWith("/chatrooms", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chatroomName: "Support" })
+  }, { authenticated: true });
 });
 
 beforeEach(() => { requestMock.mockReset(); });
