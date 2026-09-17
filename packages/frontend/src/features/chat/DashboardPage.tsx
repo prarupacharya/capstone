@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { listChatrooms, type ChatroomSummary } from "../../api/chatrooms.js";
+import { createChatroom, listChatrooms, type ChatroomSummary, type CreateChatroomInput } from "../../api/chatrooms.js";
 import type { CurrentUser } from "../../api/auth.js";
 import { createChatSocket } from "../../realtime/chat-socket.js";
 import type { Socket } from "socket.io-client";
@@ -18,16 +18,18 @@ type DashboardPageProps = {
   readonly user: CurrentUser;
   readonly onLogout: () => void;
   readonly loadChatrooms?: () => Promise<ChatroomSummary[]>;
+  readonly createChatroom?: (input: CreateChatroomInput) => Promise<ChatroomSummary>;
   readonly createSocket?: () => Socket | null;
 };
 
 export function DashboardPage({
-  user, onLogout, loadChatrooms = listChatrooms, createSocket = createChatSocket
+  user, onLogout, loadChatrooms = listChatrooms, createChatroom: createChatroomRequest = createChatroom,
+  createSocket = createChatSocket
 }: DashboardPageProps) {
   const {
     rooms, selectedId, selectedRoom, pendingRoom, status, joinRequestId,
     selectRoom, confirmJoin, cancelJoin, clearJoinRequest, markJoined, markLeft,
-    clearSelection, updateRoomUserCount
+    clearSelection, addRoom, updateRoomUserCount
   } = useChatroomCatalog(loadChatrooms);
   const { socket, isConnected, connectionStatus } = useChatSocket(createSocket);
   useRoomUserCounts(socket, isConnected, updateRoomUserCount);
@@ -46,6 +48,11 @@ export function DashboardPage({
   const composer = useMessageComposer(socket, isConnected, activeRoomId);
   const { draft, sending, sendError, onDraftChange, handleSubmit } = composer;
   actionsRef.current = { clearFeed, replaceMessages, reset: composer.reset, clearError: composer.clearError };
+  const handleCreateRoom = async (input: CreateChatroomInput) => {
+    const room = await createChatroomRequest(input);
+    addRoom(room);
+    return room;
+  };
 
   return (
     <main className="dashboard-shell">
@@ -58,7 +65,7 @@ export function DashboardPage({
       <div className="dashboard-layout">
         <ChatroomSidebar
           rooms={rooms} status={status} activeRoomId={activeRoomId} disabled={leaving}
-          isMember={isRoomMember} onSelect={selectRoom}
+          isMember={isRoomMember} onSelect={selectRoom} onCreateRoom={handleCreateRoom}
         />
         <section className="chat-panel" aria-labelledby="selected-room-heading">
           <div className="chat-panel__header">
